@@ -13,6 +13,7 @@ private:
     string readRequiredText(const string& prompt);
     string readAccountType();
     int readAccountNumber(const string& prompt);
+    double readAmount(const string& prompt);
     int findAccountIndex(int accountNumber) const;
     void printAccount(const Account& account) const;
     bool saveData();
@@ -26,4 +27,6 @@ public:
     void updateAccount();
     void closeAccount();
     void reopenAccount();
+    void depositMoney();
+    void withdrawMoney();
 };

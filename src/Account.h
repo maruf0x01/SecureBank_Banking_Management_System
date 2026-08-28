@@ -29,4 +29,6 @@ public:
     void setPhoneNumber(const string& phoneNumber);
     void setAccountType(const string& accountType);
     void setStatus(const string& status);
+    void deposit(double amount);
+    bool withdraw(double amount);
 };

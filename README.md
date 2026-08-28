@@ -68,6 +68,8 @@ warning flags, then runs the executable from the generated `build/` directory.
 - Persistent account records stored in `data/accounts.txt`
 - Safe temporary-file replacement during account saves
 - Input validation for account numbers and text-file delimiters
+- Deposits and withdrawals for active accounts
+- Insufficient-balance protection for withdrawals
 
-Deposits, withdrawals, transfers, transaction history, automated tests, and
-additional documentation will be added in later milestones.
+Fund transfers, transaction history, automated tests, and additional
+documentation will be added in later milestones.

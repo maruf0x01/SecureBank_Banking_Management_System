@@ -83,7 +83,11 @@ int main()
             bankSystem.closeAccount();
         else if(choice == 6)
             bankSystem.reopenAccount();
-        else if(choice >= 7 && choice <= 10)
+        else if(choice == 7)
+            bankSystem.depositMoney();
+        else if(choice == 8)
+            bankSystem.withdrawMoney();
+        else if(choice >= 9 && choice <= 10)
             cout << "This feature will be implemented in a future milestone.\n";
         else
             cout << "Invalid choice. Please select an available option.\n";

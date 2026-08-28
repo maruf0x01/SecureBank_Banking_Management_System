@@ -61,6 +61,22 @@ int BankSystem::readAccountNumber(const string& prompt)
     }
 }
 
+double BankSystem::readAmount(const string& prompt)
+{
+    double amount;
+
+    while(true)
+    {
+        cout << prompt;
+        if(cin >> amount && isfinite(amount) && amount > 0)
+            return amount;
+
+        cout << "Invalid amount. Enter a positive number.\n";
+        cin.clear();
+        cin.ignore(numeric_limits<streamsize>::max(), '\n');
+    }
+}
+
 int BankSystem::findAccountIndex(int accountNumber) const
 {
     for(int i = 0; i < static_cast<int>(accounts.size()); i++)
@@ -212,6 +228,70 @@ void BankSystem::reopenAccount()
     else
     {
         accounts[index].setStatus("Closed");
+        cout << "Unable to save account data.\n";
+    }
+}
+
+void BankSystem::depositMoney()
+{
+    int accountNumber = readAccountNumber("Enter account number for deposit: ");
+    int index = findAccountIndex(accountNumber);
+
+    if(index == -1)
+    {
+        cout << "Account not found.\n";
+        return;
+    }
+
+    if(accounts[index].getStatus() != "Active")
+    {
+        cout << "Transaction denied. Account is not active.\n";
+        return;
+    }
+
+    double amount = readAmount("Enter deposit amount: ");
+    accounts[index].deposit(amount);
+
+    if(saveData())
+        cout << "Deposit successful. New balance: " << fixed << setprecision(2)
+             << accounts[index].getBalance() << '\n';
+    else
+    {
+        accounts[index].withdraw(amount);
+        cout << "Unable to save account data.\n";
+    }
+}
+
+void BankSystem::withdrawMoney()
+{
+    int accountNumber = readAccountNumber("Enter account number for withdrawal: ");
+    int index = findAccountIndex(accountNumber);
+
+    if(index == -1)
+    {
+        cout << "Account not found.\n";
+        return;
+    }
+
+    if(accounts[index].getStatus() != "Active")
+    {
+        cout << "Transaction denied. Account is not active.\n";
+        return;
+    }
+
+    double amount = readAmount("Enter withdrawal amount: ");
+    if(!accounts[index].withdraw(amount))
+    {
+        cout << "Withdrawal denied. Insufficient balance.\n";
+        return;
+    }
+
+    if(saveData())
+        cout << "Withdrawal successful. New balance: " << fixed << setprecision(2)
+             << accounts[index].getBalance() << '\n';
+    else
+    {
+        accounts[index].deposit(amount);
         cout << "Unable to save account data.\n";
     }
 }

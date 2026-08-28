@@ -17,8 +17,41 @@ void showMenu()
          << "Enter your choice: ";
 }
 
+bool adminLogin()
+{
+    const string correctUsername = "admin";
+    const string correctPassword = "admin123";
+    string username, password;
+
+    for(int attempt = 1; attempt <= 3; attempt++)
+    {
+        cout << "\n===== Admin Login =====\n";
+        cout << "Username: ";
+        cin >> username;
+        cout << "Password: ";
+        cin >> password;
+
+        if(username == correctUsername && password == correctPassword)
+        {
+            cout << "Login successful.\n";
+            return true;
+        }
+
+        int remainingAttempts = 3 - attempt;
+        cout << (remainingAttempts > 0 ? "Invalid credentials. Attempts remaining: " : "Invalid credentials.\n")
+             << (remainingAttempts > 0 ? to_string(remainingAttempts) : "");
+        cout << (remainingAttempts > 0 ? "\n" : "");
+    }
+
+    cout << "\nToo many failed attempts. Access denied.\n";
+    return false;
+}
+
 int main()
 {
+    if(!adminLogin())
+        return 0;
+
     int choice = -1;
 
     while (choice != 0)

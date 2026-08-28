@@ -18,7 +18,18 @@ Customer login will be considered as a future enhancement.
 ```text
 SecureBank_Banking_Management_System/
 |-- src/
-|   `-- main.cpp
+|   |-- main.cpp
+|   |-- Account.cpp
+|   |-- Account.h
+|   |-- BankSystem.cpp
+|   |-- BankSystem.h
+|   |-- FileManager.cpp
+|   `-- FileManager.h
+|-- data/
+|   |-- accounts.txt
+|   `-- transactions.txt
+|-- tests/
+|-- docs/
 `-- README.md
 ```
 
@@ -50,4 +61,13 @@ Set-ExecutionPolicy -Scope Process Bypass
 Each script compiles all C++ source files in `src/` with C++17 and strict
 warning flags, then runs the executable from the generated `build/` directory.
 
-The current version provides the main menu. Features will be implemented incrementally.
+## Current Features
+
+- Admin-only access with three login attempts
+- Create, view, search, update, and close bank accounts
+- Persistent account records stored in `data/accounts.txt`
+- Safe temporary-file replacement during account saves
+- Input validation for account numbers and text-file delimiters
+
+Deposits, withdrawals, transfers, transaction history, automated tests, and
+additional documentation will be added in later milestones.

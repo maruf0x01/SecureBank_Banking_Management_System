@@ -1,4 +1,5 @@
 #include <bits/stdc++.h>
+#include "BankSystem.h"
 using namespace std;
 
 void showMenu()
@@ -9,10 +10,11 @@ void showMenu()
          << "3. Search account\n"
          << "4. Update account\n"
          << "5. Close account\n"
-         << "6. Deposit money\n"
-         << "7. Withdraw money\n"
-         << "8. Transfer money\n"
-         << "9. Transaction history\n"
+         << "6. Reopen account\n"
+         << "7. Deposit money\n"
+         << "8. Withdraw money\n"
+         << "9. Transfer money\n"
+         << "10. Transaction history\n"
          << "0. Exit\n"
          << "Enter your choice: ";
 }
@@ -52,6 +54,7 @@ int main()
     if(!adminLogin())
         return 0;
 
+    BankSystem bankSystem;
     int choice = -1;
 
     while(choice != 0)
@@ -68,7 +71,19 @@ int main()
 
         if(choice == 0)
             cout << "Thank you for using SecureBank.\n";
-        else if(choice >= 1 && choice <= 9)
+        else if(choice == 1)
+            bankSystem.createAccount();
+        else if(choice == 2)
+            bankSystem.viewAccounts();
+        else if(choice == 3)
+            bankSystem.searchAccount();
+        else if(choice == 4)
+            bankSystem.updateAccount();
+        else if(choice == 5)
+            bankSystem.closeAccount();
+        else if(choice == 6)
+            bankSystem.reopenAccount();
+        else if(choice >= 7 && choice <= 10)
             cout << "This feature will be implemented in a future milestone.\n";
         else
             cout << "Invalid choice. Please select an available option.\n";

@@ -24,16 +24,30 @@ SecureBank_Banking_Management_System/
 
 ## Build and Run
 
-Compile the application with:
+### Linux
+
+Make the script executable once:
 
 ```bash
-g++ -std=c++17 -Wall -Wextra -pedantic src/main.cpp -o securebank
+chmod +x build.sh
 ```
 
-Run it with:
+Build and run the application:
 
 ```bash
-./securebank
+./build.sh
 ```
+
+### Windows PowerShell
+
+Build and run the application:
+
+```powershell
+Set-ExecutionPolicy -Scope Process Bypass
+.\build.ps1
+```
+
+Each script compiles all C++ source files in `src/` with C++17 and strict
+warning flags, then runs the executable from the generated `build/` directory.
 
 The current version provides the main menu. Features will be implemented incrementally.

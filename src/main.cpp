@@ -54,11 +54,11 @@ int main()
 
     int choice = -1;
 
-    while (choice != 0)
+    while(choice != 0)
     {
         showMenu();
 
-        if (!(cin >> choice))
+        if(!(cin >> choice))
         {
             cout << "Invalid input. Please enter a number.\n";
             cin.clear();
@@ -66,9 +66,9 @@ int main()
             continue;
         }
 
-        if (choice == 0)
+        if(choice == 0)
             cout << "Thank you for using SecureBank.\n";
-        else if (choice >= 1 && choice <= 9)
+        else if(choice >= 1 && choice <= 9)
             cout << "This feature will be implemented in a future milestone.\n";
         else
             cout << "Invalid choice. Please select an available option.\n";

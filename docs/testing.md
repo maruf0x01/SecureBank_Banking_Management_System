@@ -12,5 +12,6 @@ The test suite covers:
 - Malformed, invalid, and duplicate account records
 - Transaction file save and load round trips
 - Invalid transaction records
+- Customer-name length and phone-number validation
 
 The application should also be compiled with `./run.sh` or `./run.ps1` before demonstration.

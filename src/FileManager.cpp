@@ -53,7 +53,8 @@ vector<Account> FileManager::loadAccounts(const string& fileName)
             long long parsedBalance = parseMoneyToPaisa(balance);
 
                 if(parsedAccountNumber <= 0 || accountNumbers.count(parsedAccountNumber) > 0 ||
-                    customerName.empty() || phoneNumber.empty() ||
+                    customerName.empty() || customerName.size() > 50 || phoneNumber.size() < 7 ||
+                    phoneNumber.size() > 15 || phoneNumber.find_first_not_of("0123456789") != string::npos ||
                accountType.empty() || parsedBalance < 0 ||
                (status != "Active" && status != "Closed"))
                 continue;

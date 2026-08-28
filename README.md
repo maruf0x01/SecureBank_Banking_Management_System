@@ -98,6 +98,8 @@ record handling, and transaction file persistence.
 - Transaction history for deposits, withdrawals, and transfers
 - Validation tests for balances and text-file records
 - Banking reports with balance, transaction, status, and account-type summaries
+- Customer names limited to 50 characters
+- Phone numbers validated as 7-15 digits
 
 ## Money Representation
 

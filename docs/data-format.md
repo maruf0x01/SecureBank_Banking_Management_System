@@ -13,6 +13,8 @@ account_number|customer_name|phone_number|account_type|balance|status
 
 The balance is stored as a readable decimal value in the file and converted to integer paisa in memory. Valid statuses are `Active` and `Closed`. The pipe character is reserved as the field delimiter.
 
+Customer names may contain up to 50 characters. Phone numbers must contain 7 to 15 digits.
+
 ## Transactions
 
 File: `data/transactions.txt`

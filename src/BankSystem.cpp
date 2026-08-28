@@ -7,22 +7,23 @@ BankSystem::BankSystem(const string& accountsFile)
     accounts = FileManager::loadAccounts(accountsFile);
 }
 
-string BankSystem::readRequiredText(const string& prompt)
+string BankSystem::readRequiredText(const string& prompt, size_t maximumLength)
 {
     string value;
 
-    while(value.empty() || value.find('|') != string::npos)
+    while(value.empty() || value.size() > maximumLength || value.find('|') != string::npos)
     {
         cout << prompt;
         getline(cin >> ws, value);
         if(value.empty() || value.find('|') != string::npos)
-            cout << "Invalid input. The value cannot be empty or contain '|'.\n";
+              cout << "Invalid input. The value must be 1-" << maximumLength
+                  << " characters and cannot contain '|'.\n";
     }
 
     return value;
 }
 
-string BankSystem::readOptionalText(const string& prompt)
+string BankSystem::readOptionalText(const string& prompt, size_t maximumLength)
 {
     string value;
 
@@ -30,10 +31,27 @@ string BankSystem::readOptionalText(const string& prompt)
     {
         cout << prompt;
         getline(cin, value);
-        if(value.empty() || value.find('|') == string::npos)
+        if(value.empty() || (value.size() <= maximumLength && value.find('|') == string::npos))
             return value;
 
-        cout << "Invalid input. The value cannot contain '|'.\n";
+        cout << "Invalid input. The value cannot exceed " << maximumLength
+             << " characters or contain '|'.\n";
+    }
+}
+
+string BankSystem::readPhoneNumber(bool allowSkip)
+{
+    while(true)
+    {
+        string phoneNumber = allowSkip ? readOptionalText("New phone number (press Enter to keep current): ", 15)
+                                       : readRequiredText("Phone number: ", 15);
+        if(allowSkip && phoneNumber.empty())
+            return "";
+        if(phoneNumber.size() >= 7 && phoneNumber.size() <= 15 &&
+           phoneNumber.find_first_not_of("0123456789") == string::npos)
+            return phoneNumber;
+
+        cout << "Invalid phone number. Use 7 to 15 digits only.\n";
     }
 }
 
@@ -154,8 +172,8 @@ void BankSystem::createAccount()
     for(const Account& account : accounts)
         nextAccountNumber = max(nextAccountNumber, account.getAccountNumber() + 1);
 
-    string customerName = readRequiredText("Customer name: ");
-    string phoneNumber = readRequiredText("Phone number: ");
+    string customerName = readRequiredText("Customer name: ", 50);
+    string phoneNumber = readPhoneNumber();
     string accountType = readAccountType();
     Account account(nextAccountNumber, customerName, phoneNumber, accountType, 0, "Active");
     accounts.push_back(account);
@@ -217,8 +235,8 @@ void BankSystem::updateAccount()
     Account& account = accounts[index];
     cin.ignore(numeric_limits<streamsize>::max(), '\n');
 
-    string customerName = readOptionalText("New customer name (press Enter to keep current): ");
-    string phoneNumber = readOptionalText("New phone number (press Enter to keep current): ");
+    string customerName = readOptionalText("New customer name (press Enter to keep current): ", 50);
+    string phoneNumber = readPhoneNumber(true);
     string accountType = readAccountType(true);
 
     if(!customerName.empty())

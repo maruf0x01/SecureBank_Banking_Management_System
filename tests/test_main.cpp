@@ -61,7 +61,9 @@ void testMalformedAccountLinesAreIgnored()
          << "invalid|Broken|01800000000|Current|10.00|Active\n"
          << "100002|Negative Balance|01800000000|Current|-5.00|Active\n"
          << "100003|Wrong Status|01900000000|Student|10.00|Unknown\n"
-         << "100001|Duplicate|01900000000|Savings|10.00|Active\n";
+         << "100001|Duplicate|01900000000|Savings|10.00|Active\n"
+         << "100004|Bad Phone|017-0000000|Savings|10.00|Active\n"
+         << "100005|Too Long Name That Exceeds The Maximum Name Length For This System|01900000000|Savings|10.00|Active\n";
     file.close();
 
     vector<Account> accounts = FileManager::loadAccounts(fileName);

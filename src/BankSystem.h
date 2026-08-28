@@ -12,8 +12,9 @@ private:
     string accountsFile;
     string transactionsFile;
 
-    string readRequiredText(const string& prompt);
-    string readOptionalText(const string& prompt);
+    string readRequiredText(const string& prompt, size_t maximumLength);
+    string readOptionalText(const string& prompt, size_t maximumLength);
+    string readPhoneNumber(bool allowSkip = false);
     string readAccountType(bool allowSkip = false);
     int readAccountNumber(const string& prompt) const;
     long long readAmount(const string& prompt);

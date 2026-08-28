@@ -29,4 +29,5 @@ public:
     void reopenAccount();
     void depositMoney();
     void withdrawMoney();
+    void transferMoney();
 };

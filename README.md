@@ -70,6 +70,7 @@ warning flags, then runs the executable from the generated `build/` directory.
 - Input validation for account numbers and text-file delimiters
 - Deposits and withdrawals for active accounts
 - Insufficient-balance protection for withdrawals
+- Fund transfers between two active accounts
 
-Fund transfers, transaction history, automated tests, and additional
-documentation will be added in later milestones.
+Transaction history, automated tests, and additional documentation will be
+added in later milestones.

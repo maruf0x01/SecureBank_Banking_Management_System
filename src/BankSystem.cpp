@@ -295,3 +295,51 @@ void BankSystem::withdrawMoney()
         cout << "Unable to save account data.\n";
     }
 }
+
+void BankSystem::transferMoney()
+{
+    int senderNumber = readAccountNumber("Enter sender account number: ");
+    int receiverNumber = readAccountNumber("Enter receiver account number: ");
+
+    if(senderNumber == receiverNumber)
+    {
+        cout << "Transfer denied. Sender and receiver accounts must be different.\n";
+        return;
+    }
+
+    int senderIndex = findAccountIndex(senderNumber);
+    int receiverIndex = findAccountIndex(receiverNumber);
+
+    if(senderIndex == -1 || receiverIndex == -1)
+    {
+        cout << "Transfer denied. One or both accounts were not found.\n";
+        return;
+    }
+
+    if(accounts[senderIndex].getStatus() != "Active" ||
+       accounts[receiverIndex].getStatus() != "Active")
+    {
+        cout << "Transfer denied. Both accounts must be active.\n";
+        return;
+    }
+
+    double amount = readAmount("Enter transfer amount: ");
+    if(!accounts[senderIndex].withdraw(amount))
+    {
+        cout << "Transfer denied. Insufficient balance in sender account.\n";
+        return;
+    }
+
+    accounts[receiverIndex].deposit(amount);
+    if(saveData())
+        cout << "Transfer successful.\n"
+             << "Sender balance: " << fixed << setprecision(2)
+             << accounts[senderIndex].getBalance() << '\n'
+             << "Receiver balance: " << accounts[receiverIndex].getBalance() << '\n';
+    else
+    {
+        accounts[senderIndex].deposit(amount);
+        accounts[receiverIndex].withdraw(amount);
+        cout << "Unable to save account data. Transfer cancelled.\n";
+    }
+}

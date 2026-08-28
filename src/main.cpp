@@ -4,17 +4,17 @@ using namespace std;
 void showMenu()
 {
     cout << "\n===== SecureBank Banking Management System =====\n"
-              << "1. Create account\n"
-              << "2. View all accounts\n"
-              << "3. Search account\n"
-              << "4. Update account\n"
-              << "5. Close account\n"
-              << "6. Deposit money\n"
-              << "7. Withdraw money\n"
-              << "8. Transfer money\n"
-              << "9. Transaction history\n"
-              << "0. Exit\n"
-              << "Enter your choice: ";
+         << "1. Create account\n"
+         << "2. View all accounts\n"
+         << "3. Search account\n"
+         << "4. Update account\n"
+         << "5. Close account\n"
+         << "6. Deposit money\n"
+         << "7. Withdraw money\n"
+         << "8. Transfer money\n"
+         << "9. Transaction history\n"
+         << "0. Exit\n"
+         << "Enter your choice: ";
 }
 
 int main()

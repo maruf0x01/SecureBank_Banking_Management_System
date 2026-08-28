@@ -29,13 +29,13 @@ SecureBank_Banking_Management_System/
 Make the script executable once:
 
 ```bash
-chmod +x build.sh
+chmod +x run.sh
 ```
 
 Build and run the application:
 
 ```bash
-./build.sh
+./run.sh
 ```
 
 ### Windows PowerShell
@@ -44,7 +44,7 @@ Build and run the application:
 
 ```powershell
 Set-ExecutionPolicy -Scope Process Bypass
-.\build.ps1
+.\run.ps1
 ```
 
 Each script compiles all C++ source files in `src/` with C++17 and strict

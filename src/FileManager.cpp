@@ -1,8 +1,36 @@
 #include "FileManager.h"
 
+long long parseMoneyToPaisa(const string& value)
+{
+    size_t decimalPosition = value.find('.');
+    string whole = decimalPosition == string::npos ? value : value.substr(0, decimalPosition);
+    string fraction = decimalPosition == string::npos ? "" : value.substr(decimalPosition + 1);
+
+    if(whole.empty() || fraction.size() > 2 || fraction.find_first_not_of("0123456789") != string::npos ||
+       whole.find_first_not_of("0123456789") != string::npos)
+        throw invalid_argument("Invalid money value");
+
+    while(fraction.size() < 2)
+        fraction += '0';
+
+    long long wholeValue = stoll(whole);
+    long long fractionValue = fraction.empty() ? 0 : stoll(fraction);
+    if(wholeValue > (LLONG_MAX - fractionValue) / 100)
+        throw out_of_range("Money value is too large");
+
+    return wholeValue * 100 + fractionValue;
+}
+
+string formatPaisa(long long amountPaisa)
+{
+    return to_string(amountPaisa / 100) + "." + (amountPaisa % 100 < 10 ? "0" : "") +
+           to_string(amountPaisa % 100);
+}
+
 vector<Account> FileManager::loadAccounts(const string& fileName)
 {
     vector<Account> accounts;
+    set<int> accountNumbers;
     ifstream file(fileName);
     string line;
 
@@ -22,15 +50,17 @@ vector<Account> FileManager::loadAccounts(const string& fileName)
         try
         {
             int parsedAccountNumber = stoi(accountNumber);
-            double parsedBalance = stod(balance);
+            long long parsedBalance = parseMoneyToPaisa(balance);
 
-            if(parsedAccountNumber <= 0 || customerName.empty() || phoneNumber.empty() ||
-               accountType.empty() || !isfinite(parsedBalance) || parsedBalance < 0 ||
+                if(parsedAccountNumber <= 0 || accountNumbers.count(parsedAccountNumber) > 0 ||
+                    customerName.empty() || phoneNumber.empty() ||
+               accountType.empty() || parsedBalance < 0 ||
                (status != "Active" && status != "Closed"))
                 continue;
 
             accounts.emplace_back(parsedAccountNumber, customerName, phoneNumber,
                                   accountType, parsedBalance, status);
+            accountNumbers.insert(parsedAccountNumber);
         }
         catch(...)
         {
@@ -49,14 +79,13 @@ bool FileManager::saveAccounts(const string& fileName, const vector<Account>& ac
     if(!file)
         return false;
 
-    file << fixed << setprecision(2);
     for(const Account& account : accounts)
     {
         file << account.getAccountNumber() << '|'
              << account.getCustomerName() << '|'
              << account.getPhoneNumber() << '|'
              << account.getAccountType() << '|'
-             << account.getBalance() << '|'
+             << formatPaisa(account.getBalancePaisa()) << '|'
              << account.getStatus() << '\n';
     }
 
@@ -68,17 +97,67 @@ bool FileManager::saveAccounts(const string& fileName, const vector<Account>& ac
     return rename(temporaryFile.c_str(), fileName.c_str()) == 0;
 }
 
+bool FileManager::saveAccountsAndTransactions(const string& accountsFile,
+                                              const string& transactionsFile,
+                                              const vector<Account>& accounts,
+                                              const vector<Transaction>& newTransactions)
+{
+    const string accountsTemporaryFile = accountsFile + ".tmp";
+    const string transactionsTemporaryFile = transactionsFile + ".tmp";
+    vector<Transaction> transactions = loadTransactions(transactionsFile);
+    transactions.insert(transactions.end(), newTransactions.begin(), newTransactions.end());
+
+    ofstream accountOutput(accountsTemporaryFile);
+    ofstream transactionOutput(transactionsTemporaryFile);
+    if(!accountOutput || !transactionOutput)
+        return false;
+
+    for(const Account& account : accounts)
+        accountOutput << account.getAccountNumber() << '|'
+                      << account.getCustomerName() << '|'
+                      << account.getPhoneNumber() << '|'
+                      << account.getAccountType() << '|'
+                      << formatPaisa(account.getBalancePaisa()) << '|'
+                      << account.getStatus() << '\n';
+
+    for(const Transaction& transaction : transactions)
+        transactionOutput << transaction.transactionId << '|'
+                          << transaction.accountNumber << '|'
+                          << transaction.type << '|'
+                          << formatPaisa(transaction.amountPaisa) << '|'
+                          << transaction.dateTime << '|'
+                          << transaction.relatedAccountNumber << '\n';
+
+    accountOutput.close();
+    transactionOutput.close();
+    if(accountOutput.fail() || transactionOutput.fail())
+        return false;
+
+    remove(accountsFile.c_str());
+    remove(transactionsFile.c_str());
+    if(rename(accountsTemporaryFile.c_str(), accountsFile.c_str()) != 0)
+        return false;
+
+    if(rename(transactionsTemporaryFile.c_str(), transactionsFile.c_str()) != 0)
+    {
+        remove(accountsFile.c_str());
+        return false;
+    }
+
+    return true;
+}
+
 bool FileManager::appendTransaction(const string& fileName, const Transaction& transaction)
 {
     ofstream file(fileName, ios::app);
+
     if(!file)
         return false;
 
-    file << fixed << setprecision(2)
-         << transaction.transactionId << '|'
+    file << transaction.transactionId << '|'
          << transaction.accountNumber << '|'
          << transaction.type << '|'
-         << transaction.amount << '|'
+            << formatPaisa(transaction.amountPaisa) << '|'
          << transaction.dateTime << '|'
          << transaction.relatedAccountNumber << '\n';
 
@@ -107,11 +186,11 @@ vector<Transaction> FileManager::loadTransactions(const string& fileName)
         try
         {
             int parsedAccountNumber = stoi(accountNumber);
-            double parsedAmount = stod(amount);
+            long long parsedAmount = parseMoneyToPaisa(amount);
             int parsedRelatedAccountNumber = stoi(relatedAccountNumber);
 
             if(transactionId.empty() || parsedAccountNumber <= 0 || type.empty() ||
-               !isfinite(parsedAmount) || parsedAmount <= 0 || dateTime.empty() ||
+               parsedAmount <= 0 || dateTime.empty() ||
                parsedRelatedAccountNumber < 0)
                 continue;
 

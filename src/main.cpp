@@ -15,6 +15,7 @@ void showMenu()
          << "8. Withdraw money\n"
          << "9. Transfer money\n"
          << "10. Transaction history\n"
+         << "11. Banking reports\n"
          << "0. Exit\n"
          << "Enter your choice: ";
 }
@@ -91,6 +92,8 @@ int main()
             bankSystem.transferMoney();
         else if(choice == 10)
             bankSystem.transactionHistory();
+        else if(choice == 11)
+            bankSystem.showReports();
         else
             cout << "Invalid choice. Please select an available option.\n";
     }

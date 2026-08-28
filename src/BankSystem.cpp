@@ -85,19 +85,25 @@ int BankSystem::readAccountNumber(const string& prompt) const
     }
 }
 
-double BankSystem::readAmount(const string& prompt)
+long long BankSystem::readAmount(const string& prompt)
 {
-    double amount;
+    string input;
 
     while(true)
     {
         cout << prompt;
-        if(cin >> amount && isfinite(amount) && amount > 0)
-            return amount;
+        cin >> input;
+        try
+        {
+            long long amountPaisa = parseMoneyToPaisa(input);
+            if(amountPaisa > 0)
+                return amountPaisa;
+        }
+        catch(...)
+        {
+        }
 
-        cout << "Invalid amount. Enter a positive number.\n";
-        cin.clear();
-        cin.ignore(numeric_limits<streamsize>::max(), '\n');
+        cout << "Invalid amount. Enter a positive amount with up to two decimals.\n";
     }
 }
 
@@ -116,7 +122,7 @@ void BankSystem::printAccount(const Account& account) const
          << "Customer Name: " << account.getCustomerName() << '\n'
          << "Phone Number: " << account.getPhoneNumber() << '\n'
          << "Account Type: " << account.getAccountType() << '\n'
-         << "Balance: " << fixed << setprecision(2) << account.getBalance() << '\n'
+         << "Balance: " << formatPaisa(account.getBalancePaisa()) << '\n'
          << "Status: " << account.getStatus() << "\n\n";
 }
 
@@ -125,17 +131,21 @@ bool BankSystem::saveData()
     return FileManager::saveAccounts(accountsFile, accounts);
 }
 
-bool BankSystem::recordTransaction(int accountNumber, const string& type, double amount,
-                                   int relatedAccountNumber)
+Transaction BankSystem::createTransaction(int accountNumber, const string& type,
+                                          long long amountPaisa, int relatedAccountNumber) const
 {
     auto currentTime = chrono::system_clock::to_time_t(chrono::system_clock::now());
     string timeText = ctime(&currentTime);
     timeText.erase(remove(timeText.begin(), timeText.end(), '\n'), timeText.end());
     string transactionId = "TXN" + to_string(currentTime) + to_string(accountNumber);
 
-    Transaction transaction{transactionId, accountNumber, type, amount, timeText,
-                            relatedAccountNumber};
-    return FileManager::appendTransaction(transactionsFile, transaction);
+    return {transactionId, accountNumber, type, amountPaisa, timeText, relatedAccountNumber};
+}
+
+bool BankSystem::saveFinancialChanges(const vector<Transaction>& newTransactions)
+{
+    return FileManager::saveAccountsAndTransactions(accountsFile, transactionsFile,
+                                                     accounts, newTransactions);
 }
 
 void BankSystem::createAccount()
@@ -147,7 +157,7 @@ void BankSystem::createAccount()
     string customerName = readRequiredText("Customer name: ");
     string phoneNumber = readRequiredText("Phone number: ");
     string accountType = readAccountType();
-    Account account(nextAccountNumber, customerName, phoneNumber, accountType, 0.0, "Active");
+    Account account(nextAccountNumber, customerName, phoneNumber, accountType, 0, "Active");
     accounts.push_back(account);
 
     if(saveData())
@@ -295,18 +305,16 @@ void BankSystem::depositMoney()
         return;
     }
 
-    double amount = readAmount("Enter deposit amount: ");
-    accounts[index].deposit(amount);
+    long long amountPaisa = readAmount("Enter deposit amount: ");
+    accounts[index].deposit(amountPaisa);
 
-    if(saveData())
+    if(saveFinancialChanges({createTransaction(accountNumber, "Deposit", amountPaisa)}))
     {
-        recordTransaction(accountNumber, "Deposit", amount);
-        cout << "Deposit successful. New balance: " << fixed << setprecision(2)
-             << accounts[index].getBalance() << '\n';
+        cout << "Deposit successful. New balance: " << formatPaisa(accounts[index].getBalancePaisa()) << '\n';
     }
     else
     {
-        accounts[index].withdraw(amount);
+        accounts[index].withdraw(amountPaisa);
         cout << "Unable to save account data.\n";
     }
 }
@@ -328,22 +336,20 @@ void BankSystem::withdrawMoney()
         return;
     }
 
-    double amount = readAmount("Enter withdrawal amount: ");
-    if(!accounts[index].withdraw(amount))
+    long long amountPaisa = readAmount("Enter withdrawal amount: ");
+    if(!accounts[index].withdraw(amountPaisa))
     {
         cout << "Withdrawal denied. Insufficient balance.\n";
         return;
     }
 
-    if(saveData())
+    if(saveFinancialChanges({createTransaction(accountNumber, "Withdrawal", amountPaisa)}))
     {
-        recordTransaction(accountNumber, "Withdrawal", amount);
-        cout << "Withdrawal successful. New balance: " << fixed << setprecision(2)
-             << accounts[index].getBalance() << '\n';
+        cout << "Withdrawal successful. New balance: " << formatPaisa(accounts[index].getBalancePaisa()) << '\n';
     }
     else
     {
-        accounts[index].deposit(amount);
+        accounts[index].deposit(amountPaisa);
         cout << "Unable to save account data.\n";
     }
 }
@@ -375,27 +381,25 @@ void BankSystem::transferMoney()
         return;
     }
 
-    double amount = readAmount("Enter transfer amount: ");
-    if(!accounts[senderIndex].withdraw(amount))
+    long long amountPaisa = readAmount("Enter transfer amount: ");
+    if(!accounts[senderIndex].withdraw(amountPaisa))
     {
         cout << "Transfer denied. Insufficient balance in sender account.\n";
         return;
     }
 
-    accounts[receiverIndex].deposit(amount);
-    if(saveData())
+    accounts[receiverIndex].deposit(amountPaisa);
+    if(saveFinancialChanges({createTransaction(senderNumber, "Transfer Sent", amountPaisa, receiverNumber),
+                             createTransaction(receiverNumber, "Transfer Received", amountPaisa, senderNumber)}))
     {
-        recordTransaction(senderNumber, "Transfer Sent", amount, receiverNumber);
-        recordTransaction(receiverNumber, "Transfer Received", amount, senderNumber);
         cout << "Transfer successful.\n"
-             << "Sender balance: " << fixed << setprecision(2)
-             << accounts[senderIndex].getBalance() << '\n'
-             << "Receiver balance: " << accounts[receiverIndex].getBalance() << '\n';
+               << "Sender balance: " << formatPaisa(accounts[senderIndex].getBalancePaisa()) << '\n'
+               << "Receiver balance: " << formatPaisa(accounts[receiverIndex].getBalancePaisa()) << '\n';
     }
     else
     {
-        accounts[senderIndex].deposit(amount);
-        accounts[receiverIndex].withdraw(amount);
+        accounts[senderIndex].deposit(amountPaisa);
+        accounts[receiverIndex].withdraw(amountPaisa);
         cout << "Unable to save account data. Transfer cancelled.\n";
     }
 }
@@ -413,7 +417,7 @@ void BankSystem::transactionHistory() const
         {
             cout << "Transaction ID: " << transaction.transactionId << '\n'
                  << "Type: " << transaction.type << '\n'
-                 << "Amount: " << fixed << setprecision(2) << transaction.amount << '\n'
+                 << "Amount: " << formatPaisa(transaction.amountPaisa) << '\n'
                  << "Date: " << transaction.dateTime << '\n';
             if(transaction.relatedAccountNumber != 0)
                 cout << "Related Account: " << transaction.relatedAccountNumber << '\n';
@@ -424,4 +428,46 @@ void BankSystem::transactionHistory() const
 
     if(!found)
         cout << "No transactions found for this account.\n";
+}
+
+void BankSystem::showReports() const
+{
+    vector<Transaction> transactions = FileManager::loadTransactions(transactionsFile);
+    long long totalDeposits = 0;
+    long long totalWithdrawals = 0;
+    long long totalTransfers = 0;
+    long long totalBalance = 0;
+    int activeAccounts = 0;
+    int closedAccounts = 0;
+    map<string, int> accountTypeCounts;
+
+    for(const Account& account : accounts)
+    {
+        totalBalance += account.getBalancePaisa();
+        accountTypeCounts[account.getAccountType()]++;
+        account.getStatus() == "Active" ? activeAccounts++ : closedAccounts++;
+    }
+
+    for(const Transaction& transaction : transactions)
+    {
+        if(transaction.type == "Deposit")
+            totalDeposits += transaction.amountPaisa;
+        else if(transaction.type == "Withdrawal")
+            totalWithdrawals += transaction.amountPaisa;
+        else if(transaction.type == "Transfer Sent")
+            totalTransfers += transaction.amountPaisa;
+    }
+
+    cout << "\n===== Banking Reports =====\n"
+         << "Total accounts: " << accounts.size() << '\n'
+         << "Active accounts: " << activeAccounts << '\n'
+         << "Closed accounts: " << closedAccounts << '\n'
+         << "Total balance: " << formatPaisa(totalBalance) << '\n'
+         << "Total deposits: " << formatPaisa(totalDeposits) << '\n'
+         << "Total withdrawals: " << formatPaisa(totalWithdrawals) << '\n'
+         << "Total transferred: " << formatPaisa(totalTransfers) << '\n'
+         << "\nAccount types:\n";
+
+    for(const auto& entry : accountTypeCounts)
+        cout << entry.first << ": " << entry.second << '\n';
 }

@@ -2,6 +2,7 @@
 
 #include <bits/stdc++.h>
 #include "Account.h"
+#include "FileManager.h"
 using namespace std;
 
 class BankSystem
@@ -15,12 +16,13 @@ private:
     string readOptionalText(const string& prompt);
     string readAccountType(bool allowSkip = false);
     int readAccountNumber(const string& prompt) const;
-    double readAmount(const string& prompt);
+    long long readAmount(const string& prompt);
     int findAccountIndex(int accountNumber) const;
     void printAccount(const Account& account) const;
     bool saveData();
-    bool recordTransaction(int accountNumber, const string& type, double amount,
-                           int relatedAccountNumber = 0);
+    Transaction createTransaction(int accountNumber, const string& type, long long amountPaisa,
+                                  int relatedAccountNumber = 0) const;
+    bool saveFinancialChanges(const vector<Transaction>& newTransactions);
 
 public:
     explicit BankSystem(const string& accountsFile = "data/accounts.txt");
@@ -35,4 +37,5 @@ public:
     void withdrawMoney();
     void transferMoney();
     void transactionHistory() const;
+    void showReports() const;
 };

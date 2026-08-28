@@ -1,14 +1,14 @@
 #include "Account.h"
 
 Account::Account()
-    : accountNumber(0), balance(0.0), status("Active")
+    : accountNumber(0), balancePaisa(0), status("Active")
 {
 }
 
 Account::Account(int accountNumber, const string& customerName, const string& phoneNumber,
-                 const string& accountType, double balance, const string& status)
+                                 const string& accountType, long long balancePaisa, const string& status)
     : accountNumber(accountNumber), customerName(customerName), phoneNumber(phoneNumber),
-      accountType(accountType), balance(balance), status(status)
+            accountType(accountType), balancePaisa(balancePaisa), status(status)
 {
 }
 
@@ -32,9 +32,9 @@ string Account::getAccountType() const
     return accountType;
 }
 
-double Account::getBalance() const
+long long Account::getBalancePaisa() const
 {
-    return balance;
+    return balancePaisa;
 }
 
 string Account::getStatus() const
@@ -62,20 +62,20 @@ void Account::setStatus(const string& status)
     this->status = status;
 }
 
-bool Account::deposit(double amount)
+bool Account::deposit(long long amountPaisa)
 {
-    if(!isfinite(amount) || amount <= 0)
+    if(amountPaisa <= 0 || balancePaisa > LLONG_MAX - amountPaisa)
         return false;
 
-    balance += amount;
+    balancePaisa += amountPaisa;
     return true;
 }
 
-bool Account::withdraw(double amount)
+bool Account::withdraw(long long amountPaisa)
 {
-    if(!isfinite(amount) || amount <= 0 || amount > balance)
+    if(amountPaisa <= 0 || amountPaisa > balancePaisa)
         return false;
 
-    balance -= amount;
+    balancePaisa -= amountPaisa;
     return true;
 }

@@ -30,6 +30,10 @@ SecureBank_Banking_Management_System/
 |   `-- transactions.txt
 |-- tests/
 |-- docs/
+|   |-- system-design.md
+|   |-- data-format.md
+|   |-- testing.md
+|   `-- limitations.md
 `-- README.md
 ```
 
@@ -93,5 +97,12 @@ record handling, and transaction file persistence.
 - Selective account updates with Enter-to-keep-current support
 - Transaction history for deposits, withdrawals, and transfers
 - Validation tests for balances and text-file records
+- Banking reports with balance, transaction, status, and account-type summaries
+
+## Money Representation
+
+Balances and transaction amounts are stored internally as integer paisa. This
+prevents floating-point rounding errors. Text files display money in ordinary
+decimal form with two digits after the decimal point.
 
 Additional documentation will be added in later milestones.

@@ -90,7 +90,7 @@ int main()
         else if(choice == 9)
             bankSystem.transferMoney();
         else if(choice == 10)
-            cout << "This feature will be implemented in a future milestone.\n";
+            bankSystem.transactionHistory();
         else
             cout << "Invalid choice. Please select an available option.\n";
     }

@@ -71,6 +71,8 @@ warning flags, then runs the executable from the generated `build/` directory.
 - Deposits and withdrawals for active accounts
 - Insufficient-balance protection for withdrawals
 - Fund transfers between two active accounts
+- Selective account updates with Enter-to-keep-current support
+- Transaction history for deposits, withdrawals, and transfers
 
-Transaction history, automated tests, and additional documentation will be
-added in later milestones.
+Automated tests and additional documentation will be added in later
+milestones.

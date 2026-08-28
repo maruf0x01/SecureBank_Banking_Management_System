@@ -2,7 +2,7 @@
 #include "FileManager.h"
 
 BankSystem::BankSystem(const string& accountsFile)
-    : accountsFile(accountsFile)
+    : accountsFile(accountsFile), transactionsFile("data/transactions.txt")
 {
     accounts = FileManager::loadAccounts(accountsFile);
 }
@@ -22,10 +22,25 @@ string BankSystem::readRequiredText(const string& prompt)
     return value;
 }
 
-string BankSystem::readAccountType()
+string BankSystem::readOptionalText(const string& prompt)
+{
+    string value;
+
+    while(true)
+    {
+        cout << prompt;
+        getline(cin, value);
+        if(value.empty() || value.find('|') == string::npos)
+            return value;
+
+        cout << "Invalid input. The value cannot contain '|'.\n";
+    }
+}
+
+string BankSystem::readAccountType(bool allowSkip)
 {
     const vector<string> accountTypes = {"Savings", "Current", "Student", "Business"};
-    int choice;
+    string input;
 
     while(true)
     {
@@ -34,18 +49,27 @@ string BankSystem::readAccountType()
              << "2. Current\n"
              << "3. Student\n"
              << "4. Business\n"
-             << "Enter your choice: ";
+             << (allowSkip ? "Enter your choice or press Enter to keep current type: " : "Enter your choice: ");
 
-        if(cin >> choice && choice >= 1 && choice <= static_cast<int>(accountTypes.size()))
-            return accountTypes[choice - 1];
+        getline(cin, input);
+        if(allowSkip && input.empty())
+            return "";
+
+        try
+        {
+            int choice = stoi(input);
+            if(choice >= 1 && choice <= static_cast<int>(accountTypes.size()))
+                return accountTypes[choice - 1];
+        }
+        catch(...)
+        {
+        }
 
         cout << "Invalid account type selection.\n";
-        cin.clear();
-        cin.ignore(numeric_limits<streamsize>::max(), '\n');
     }
 }
 
-int BankSystem::readAccountNumber(const string& prompt)
+int BankSystem::readAccountNumber(const string& prompt) const
 {
     int accountNumber;
 
@@ -99,6 +123,19 @@ void BankSystem::printAccount(const Account& account) const
 bool BankSystem::saveData()
 {
     return FileManager::saveAccounts(accountsFile, accounts);
+}
+
+bool BankSystem::recordTransaction(int accountNumber, const string& type, double amount,
+                                   int relatedAccountNumber)
+{
+    auto currentTime = chrono::system_clock::to_time_t(chrono::system_clock::now());
+    string timeText = ctime(&currentTime);
+    timeText.erase(remove(timeText.begin(), timeText.end(), '\n'), timeText.end());
+    string transactionId = "TXN" + to_string(currentTime) + to_string(accountNumber);
+
+    Transaction transaction{transactionId, accountNumber, type, amount, timeText,
+                            relatedAccountNumber};
+    return FileManager::appendTransaction(transactionsFile, transaction);
 }
 
 void BankSystem::createAccount()
@@ -168,9 +205,18 @@ void BankSystem::updateAccount()
     }
 
     Account& account = accounts[index];
-    account.setCustomerName(readRequiredText("New customer name: "));
-    account.setPhoneNumber(readRequiredText("New phone number: "));
-    account.setAccountType(readAccountType());
+    cin.ignore(numeric_limits<streamsize>::max(), '\n');
+
+    string customerName = readOptionalText("New customer name (press Enter to keep current): ");
+    string phoneNumber = readOptionalText("New phone number (press Enter to keep current): ");
+    string accountType = readAccountType(true);
+
+    if(!customerName.empty())
+        account.setCustomerName(customerName);
+    if(!phoneNumber.empty())
+        account.setPhoneNumber(phoneNumber);
+    if(!accountType.empty())
+        account.setAccountType(accountType);
 
     if(saveData())
         cout << "Account updated successfully.\n";
@@ -253,8 +299,11 @@ void BankSystem::depositMoney()
     accounts[index].deposit(amount);
 
     if(saveData())
+    {
+        recordTransaction(accountNumber, "Deposit", amount);
         cout << "Deposit successful. New balance: " << fixed << setprecision(2)
              << accounts[index].getBalance() << '\n';
+    }
     else
     {
         accounts[index].withdraw(amount);
@@ -287,8 +336,11 @@ void BankSystem::withdrawMoney()
     }
 
     if(saveData())
+    {
+        recordTransaction(accountNumber, "Withdrawal", amount);
         cout << "Withdrawal successful. New balance: " << fixed << setprecision(2)
              << accounts[index].getBalance() << '\n';
+    }
     else
     {
         accounts[index].deposit(amount);
@@ -332,14 +384,44 @@ void BankSystem::transferMoney()
 
     accounts[receiverIndex].deposit(amount);
     if(saveData())
+    {
+        recordTransaction(senderNumber, "Transfer Sent", amount, receiverNumber);
+        recordTransaction(receiverNumber, "Transfer Received", amount, senderNumber);
         cout << "Transfer successful.\n"
              << "Sender balance: " << fixed << setprecision(2)
              << accounts[senderIndex].getBalance() << '\n'
              << "Receiver balance: " << accounts[receiverIndex].getBalance() << '\n';
+    }
     else
     {
         accounts[senderIndex].deposit(amount);
         accounts[receiverIndex].withdraw(amount);
         cout << "Unable to save account data. Transfer cancelled.\n";
     }
+}
+
+void BankSystem::transactionHistory() const
+{
+    int accountNumber = readAccountNumber("Enter account number for transaction history: ");
+    vector<Transaction> transactions = FileManager::loadTransactions(transactionsFile);
+    bool found = false;
+
+    cout << "\n===== Transaction History =====\n";
+    for(const Transaction& transaction : transactions)
+    {
+        if(transaction.accountNumber == accountNumber)
+        {
+            cout << "Transaction ID: " << transaction.transactionId << '\n'
+                 << "Type: " << transaction.type << '\n'
+                 << "Amount: " << fixed << setprecision(2) << transaction.amount << '\n'
+                 << "Date: " << transaction.dateTime << '\n';
+            if(transaction.relatedAccountNumber != 0)
+                cout << "Related Account: " << transaction.relatedAccountNumber << '\n';
+            cout << "\n";
+            found = true;
+        }
+    }
+
+    if(!found)
+        cout << "No transactions found for this account.\n";
 }

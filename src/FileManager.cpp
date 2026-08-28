@@ -59,3 +59,53 @@ bool FileManager::saveAccounts(const string& fileName, const vector<Account>& ac
     remove(fileName.c_str());
     return rename(temporaryFile.c_str(), fileName.c_str()) == 0;
 }
+
+bool FileManager::appendTransaction(const string& fileName, const Transaction& transaction)
+{
+    ofstream file(fileName, ios::app);
+    if(!file)
+        return false;
+
+    file << fixed << setprecision(2)
+         << transaction.transactionId << '|'
+         << transaction.accountNumber << '|'
+         << transaction.type << '|'
+         << transaction.amount << '|'
+         << transaction.dateTime << '|'
+         << transaction.relatedAccountNumber << '\n';
+
+    return file.good();
+}
+
+vector<Transaction> FileManager::loadTransactions(const string& fileName)
+{
+    vector<Transaction> transactions;
+    ifstream file(fileName);
+    string line;
+
+    while(getline(file, line))
+    {
+        if(line.empty())
+            continue;
+
+        stringstream stream(line);
+        string transactionId, accountNumber, type, amount, dateTime, relatedAccountNumber;
+
+        if(!getline(stream, transactionId, '|') || !getline(stream, accountNumber, '|') ||
+           !getline(stream, type, '|') || !getline(stream, amount, '|') ||
+           !getline(stream, dateTime, '|') || !getline(stream, relatedAccountNumber))
+            continue;
+
+        try
+        {
+            transactions.push_back({transactionId, stoi(accountNumber), type, stod(amount),
+                                    dateTime, stoi(relatedAccountNumber)});
+        }
+        catch(...)
+        {
+            continue;
+        }
+    }
+
+    return transactions;
+}

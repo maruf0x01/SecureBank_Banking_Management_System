@@ -61,6 +61,25 @@ Set-ExecutionPolicy -Scope Process Bypass
 Each script compiles all C++ source files in `src/` with C++17 and strict
 warning flags, then runs the executable from the generated `build/` directory.
 
+## Run Tests
+
+On Linux, run the validation suite with:
+
+```bash
+chmod +x test.sh
+./test.sh
+```
+
+On Windows PowerShell, run:
+
+```powershell
+Set-ExecutionPolicy -Scope Process Bypass
+.\test.ps1
+```
+
+The tests cover account balance rules, account file persistence, malformed
+record handling, and transaction file persistence.
+
 ## Current Features
 
 - Admin-only access with three login attempts
@@ -73,6 +92,6 @@ warning flags, then runs the executable from the generated `build/` directory.
 - Fund transfers between two active accounts
 - Selective account updates with Enter-to-keep-current support
 - Transaction history for deposits, withdrawals, and transfers
+- Validation tests for balances and text-file records
 
-Automated tests and additional documentation will be added in later
-milestones.
+Additional documentation will be added in later milestones.

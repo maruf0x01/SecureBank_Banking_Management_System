@@ -21,8 +21,16 @@ vector<Account> FileManager::loadAccounts(const string& fileName)
 
         try
         {
-            accounts.emplace_back(stoi(accountNumber), customerName, phoneNumber,
-                                  accountType, stod(balance), status);
+            int parsedAccountNumber = stoi(accountNumber);
+            double parsedBalance = stod(balance);
+
+            if(parsedAccountNumber <= 0 || customerName.empty() || phoneNumber.empty() ||
+               accountType.empty() || !isfinite(parsedBalance) || parsedBalance < 0 ||
+               (status != "Active" && status != "Closed"))
+                continue;
+
+            accounts.emplace_back(parsedAccountNumber, customerName, phoneNumber,
+                                  accountType, parsedBalance, status);
         }
         catch(...)
         {
@@ -98,8 +106,17 @@ vector<Transaction> FileManager::loadTransactions(const string& fileName)
 
         try
         {
-            transactions.push_back({transactionId, stoi(accountNumber), type, stod(amount),
-                                    dateTime, stoi(relatedAccountNumber)});
+            int parsedAccountNumber = stoi(accountNumber);
+            double parsedAmount = stod(amount);
+            int parsedRelatedAccountNumber = stoi(relatedAccountNumber);
+
+            if(transactionId.empty() || parsedAccountNumber <= 0 || type.empty() ||
+               !isfinite(parsedAmount) || parsedAmount <= 0 || dateTime.empty() ||
+               parsedRelatedAccountNumber < 0)
+                continue;
+
+            transactions.push_back({transactionId, parsedAccountNumber, type, parsedAmount,
+                                    dateTime, parsedRelatedAccountNumber});
         }
         catch(...)
         {

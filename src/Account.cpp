@@ -62,14 +62,18 @@ void Account::setStatus(const string& status)
     this->status = status;
 }
 
-void Account::deposit(double amount)
+bool Account::deposit(double amount)
 {
+    if(!isfinite(amount) || amount <= 0)
+        return false;
+
     balance += amount;
+    return true;
 }
 
 bool Account::withdraw(double amount)
 {
-    if(amount > balance)
+    if(!isfinite(amount) || amount <= 0 || amount > balance)
         return false;
 
     balance -= amount;

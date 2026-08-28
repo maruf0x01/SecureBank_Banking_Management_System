@@ -1,8 +1,9 @@
-#include <iostream>
-#include <limits>
+#include <bits/stdc++.h>
+using namespace std;
 
-void showMenu() {
-    std::cout << "\n===== SecureBank Banking Management System =====\n"
+void showMenu()
+{
+    cout << "\n===== SecureBank Banking Management System =====\n"
               << "1. Create account\n"
               << "2. View all accounts\n"
               << "3. Search account\n"
@@ -16,26 +17,28 @@ void showMenu() {
               << "Enter your choice: ";
 }
 
-int main() {
+int main()
+{
     int choice = -1;
 
-    while (choice != 0) {
+    while (choice != 0)
+    {
         showMenu();
 
-        if (!(std::cin >> choice)) {
-            std::cout << "Invalid input. Please enter a number.\n";
-            std::cin.clear();
-            std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+        if (!(cin >> choice))
+        {
+            cout << "Invalid input. Please enter a number.\n";
+            cin.clear();
+            cin.ignore(numeric_limits<streamsize>::max(), '\n');
             continue;
         }
 
-        if (choice == 0) {
-            std::cout << "Thank you for using SecureBank.\n";
-        } else if (choice >= 1 && choice <= 9) {
-            std::cout << "This feature will be implemented in a future milestone.\n";
-        } else {
-            std::cout << "Invalid choice. Please select an available option.\n";
-        }
+        if (choice == 0)
+            cout << "Thank you for using SecureBank.\n";
+        else if (choice >= 1 && choice <= 9)
+            cout << "This feature will be implemented in a future milestone.\n";
+        else
+            cout << "Invalid choice. Please select an available option.\n";
     }
 
     return 0;

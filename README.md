@@ -19,6 +19,7 @@ Customer login will be considered as a future enhancement.
 SecureBank_Banking_Management_System/
 |-- src/
 |   |-- main.cpp
+|   |-- gui/            (Qt6 GUI: windows, dialogs, BankService)
 |   |-- Account.cpp
 |   |-- Account.h
 |   |-- BankSystem.cpp
@@ -34,6 +35,7 @@ SecureBank_Banking_Management_System/
 |   |-- data-format.md
 |   |-- testing.md
 |   `-- limitations.md
+|-- CMakeLists.txt
 `-- README.md
 ```
 
@@ -64,6 +66,51 @@ Set-ExecutionPolicy -Scope Process Bypass
 
 Each script compiles all C++ source files in `src/` with C++17 and strict
 warning flags, then runs the executable from the generated `build/` directory.
+
+## Qt6 GUI
+
+A Qt6 Widgets front-end lives in `src/gui/` and shares the same `Account` and
+`FileManager` code and `data/` files as the console version. The sign-in window
+has two roles.
+
+**Admin** (`admin` / `admin123`)
+
+- Dashboard with account, balance and transaction totals
+- Create, edit, close/reopen and **delete** accounts (deletion needs a zero
+  balance and typing the account number to confirm)
+- **Activate** accounts that customers registered themselves (pending accounts)
+- Deposit, withdraw and transfer on behalf of customers
+- **Approve or reject deposit requests** from customers
+- Create, reset or remove customer logins
+- Search, filter and browse transaction history
+
+**Customer**
+
+- **Self-registration**: create a bank account from the sign-in window. The
+  account stays *Pending* until an admin activates it.
+- Overview with balance and recent activity
+- **Send money**: the receiver's account number and holder name must match
+  before the transfer is allowed, followed by a confirmation
+- **Withdraw**: requires the customer's password (3 wrong attempts sign out)
+- **Deposit**: submitted as a request; the balance is credited only after admin
+  approval
+- Transaction history, change phone number, change password
+
+All inputs are validated (names, phone numbers, usernames, passwords, amounts
+up to 100,000,000.00 per transaction, account numbers).
+
+Customer passwords are stored as salted SHA-256 hashes.
+
+Requirements: CMake 3.16+, a C++17 compiler, and Qt 6 (Widgets), e.g.
+`sudo apt install qt6-base-dev cmake`.
+
+```bash
+./run_gui.sh
+```
+
+Or manually: `cmake -S . -B build/cmake && cmake --build build/cmake`, then run
+`./build/cmake/securebank_gui` from the project root. The console version is
+still available through `./run.sh`.
 
 ## Run Tests
 
@@ -107,4 +154,12 @@ Balances and transaction amounts are stored internally as integer paisa. This
 prevents floating-point rounding errors. Text files display money in ordinary
 decimal form with two digits after the decimal point.
 
-Additional documentation will be added in later milestones.
+## Runtime Data
+
+The files in `data/` (`accounts.txt`, `transactions.txt`, `customers.txt`,
+`deposit_requests.txt`) are created and updated at runtime. They hold customer
+information and password hashes, so they are listed in `.gitignore` and are not
+committed. The directory is created automatically on first run.
+
+Account statuses are `Active`, `Closed` and `Pending` (awaiting admin
+activation). The console version does not know about pending accounts.

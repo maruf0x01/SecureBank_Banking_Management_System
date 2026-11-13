@@ -1,0 +1,340 @@
+#include "CustomerWindow.h"
+
+#include <QComboBox>
+#include <QFormLayout>
+#include <QHBoxLayout>
+#include <QInputDialog>
+#include <QLabel>
+#include <QListWidget>
+#include <QMessageBox>
+#include <QPushButton>
+#include <QStackedWidget>
+#include <QStatusBar>
+#include <QTableWidget>
+#include <QVBoxLayout>
+
+#include "Dialogs.h"
+#include "Theme.h"
+
+CustomerWindow::CustomerWindow(BankService& bank, int accountNumber)
+    : bank(bank), accountNumber(accountNumber)
+{
+    setWindowTitle("SecureBank - My Account");
+    resize(980, 640);
+
+    auto* central = new QWidget;
+    auto* layout = new QHBoxLayout(central);
+    layout->setContentsMargins(0, 0, 0, 0);
+    layout->setSpacing(0);
+    pages = new QStackedWidget;
+    layout->addWidget(buildSidebar());
+    pages->addWidget(buildOverview());
+    pages->addWidget(buildHistory());
+    pages->addWidget(buildRequests());
+    pages->addWidget(buildProfile());
+    layout->addWidget(pages, 1);
+    setCentralWidget(central);
+
+    connect(sidebar, &QListWidget::currentRowChanged, this, [this](int row) {
+        pages->setCurrentIndex(row);
+        refresh();
+    });
+    sidebar->setCurrentRow(0);
+    refresh();
+}
+
+QWidget* CustomerWindow::buildSidebar()
+{
+    auto* panel = new QWidget;
+    panel->setFixedWidth(200);
+    panel->setObjectName("sidePanel");
+    panel->setAttribute(Qt::WA_StyledBackground, true);
+    auto* v = new QVBoxLayout(panel);
+    v->setContentsMargins(0, 0, 0, 12);
+    v->setSpacing(0);
+    auto* brand = new QLabel("SecureBank");
+    brand->setObjectName("brand");
+    auto* sub = new QLabel("Online banking");
+    sub->setObjectName("brandSub");
+    sidebar = new QListWidget;
+    sidebar->setObjectName("sidebar");
+    sidebar->addItems({"Overview", "Transactions", "Deposit requests", "Profile & security"});
+    sidebar->setFocusPolicy(Qt::NoFocus);
+    for(int i = 0; i < sidebar->count(); i++)
+        sidebar->item(i)->setSizeHint(QSize(0, 44));
+    auto* logout = new QPushButton("Sign out");
+    logout->setProperty("logout", true);
+    connect(logout, &QPushButton::clicked, this, [this] {
+        emit loggedOut();
+        close();
+    });
+    v->addWidget(brand);
+    v->addWidget(sub);
+    v->addWidget(sidebar, 1);
+    v->addWidget(makeSideButtons({logout}));
+    return panel;
+}
+
+QWidget* CustomerWindow::buildOverview()
+{
+    auto* page = new QWidget;
+    auto* v = new QVBoxLayout(page);
+    v->setContentsMargins(24, 20, 24, 20);
+
+    welcomeLabel = new QLabel;
+    welcomeLabel->setObjectName("pageTitle");
+    v->addWidget(welcomeLabel);
+
+    auto* hero = new QFrame;
+    hero->setObjectName("heroCard");
+    auto* hv = new QVBoxLayout(hero);
+    hv->setContentsMargins(24, 20, 24, 20);
+    auto* caption = new QLabel("Available balance");
+    caption->setObjectName("onBlue");
+    balanceLabel = new QLabel;
+    balanceLabel->setObjectName("balanceValue");
+    accountLabel = new QLabel;
+    accountLabel->setObjectName("onBlue");
+    hv->addWidget(caption);
+    hv->addWidget(balanceLabel);
+    hv->addWidget(accountLabel);
+    v->addWidget(hero);
+
+    statusLabel = new QLabel;
+    statusLabel->setObjectName("subtle");
+    auto* deposit = makeButton("Deposit", false);
+    deposit->setMinimumHeight(38);
+    connect(deposit, &QPushButton::clicked, this, [this] { doRequestDeposit(); });
+    auto* withdraw = makeButton("Withdraw", false);
+    auto* transfer = makeButton("Send money", true);
+    withdraw->setMinimumHeight(38);
+    transfer->setMinimumHeight(38);
+    connect(withdraw, &QPushButton::clicked, this, [this] { doWithdraw(); });
+    connect(transfer, &QPushButton::clicked, this, [this] { doTransfer(); });
+    auto* row = new QHBoxLayout;
+    row->addWidget(transfer);
+    row->addWidget(deposit);
+    row->addWidget(withdraw);
+    row->addStretch();
+    row->addWidget(statusLabel);
+    v->addLayout(row);
+
+    v->addSpacing(6);
+    v->addWidget(new QLabel("<b>Recent activity</b>"));
+    recentTable = makeTable({});
+    v->addWidget(recentTable, 1);
+    return page;
+}
+
+QWidget* CustomerWindow::buildHistory()
+{
+    auto* page = new QWidget;
+    auto* v = new QVBoxLayout(page);
+    v->setContentsMargins(24, 20, 24, 20);
+    makeTitle("Transactions", "Your complete transaction history.", v);
+    historyType = new QComboBox;
+    historyType->addItems({"All types", "Deposit", "Withdrawal", "Transfer Sent", "Transfer Received"});
+    auto* row = new QHBoxLayout;
+    row->addWidget(historyType);
+    row->addStretch();
+    v->addLayout(row);
+    historyTable = makeTable({});
+    v->addWidget(historyTable, 1);
+    connect(historyType, &QComboBox::currentIndexChanged, this, [this] { refresh(); });
+    return page;
+}
+
+QWidget* CustomerWindow::buildRequests()
+{
+    auto* page = new QWidget;
+    auto* v = new QVBoxLayout(page);
+    v->setContentsMargins(24, 20, 24, 20);
+    makeTitle("Deposit requests", "Deposits are credited to your balance once an administrator approves them.", v);
+    auto* btn = makeButton("Request a deposit", true);
+    connect(btn, &QPushButton::clicked, this, [this] { doRequestDeposit(); });
+    auto* row = new QHBoxLayout;
+    row->addWidget(btn);
+    row->addStretch();
+    v->addLayout(row);
+    requestTable = makeTable({"Request ID", "Requested", "Amount", "Status", "Decided"});
+    v->addWidget(requestTable, 1);
+    return page;
+}
+
+QWidget* CustomerWindow::buildProfile()
+{
+    auto* page = new QWidget;
+    auto* v = new QVBoxLayout(page);
+    v->setContentsMargins(24, 20, 24, 20);
+    makeTitle("Profile & security", "Your account details and sign-in settings.", v);
+
+    auto* card = makeCard();
+    auto* form = new QFormLayout(card);
+    form->setContentsMargins(20, 16, 20, 16);
+    form->setVerticalSpacing(10);
+    profileName = new QLabel;
+    profileAccount = new QLabel;
+    profileType = new QLabel;
+    profilePhone = new QLabel;
+    profileStatus = new QLabel;
+    form->addRow("Name", profileName);
+    form->addRow("Account number", profileAccount);
+    form->addRow("Account type", profileType);
+    form->addRow("Phone", profilePhone);
+    form->addRow("Status", profileStatus);
+    v->addWidget(card);
+
+    auto* phone = makeButton("Change phone number");
+    auto* pass = makeButton("Change password");
+    connect(phone, &QPushButton::clicked, this, [this] { doChangePhone(); });
+    connect(pass, &QPushButton::clicked, this, [this] { doChangePassword(); });
+    auto* row = new QHBoxLayout;
+    row->addWidget(phone);
+    row->addWidget(pass);
+    row->addStretch();
+    v->addLayout(row);
+    v->addStretch();
+    return page;
+}
+
+void CustomerWindow::refresh()
+{
+    bank.reload(); // pick up changes made by an administrator
+    const Account* a = bank.find(accountNumber);
+    if(!a)
+        return;
+    QString name = QString::fromStdString(a->getCustomerName());
+    welcomeLabel->setText("Welcome, " + name);
+    balanceLabel->setText(money(a->getBalancePaisa()));
+    accountLabel->setText(QString("%1 account  -  No. %2").arg(QString::fromStdString(a->getAccountType())).arg(accountNumber));
+    bool active = a->getStatus() == "Active";
+    statusLabel->setText(active ? "" : "This account is closed. Transactions are disabled.");
+
+    profileName->setText(name);
+    profileAccount->setText(QString::number(accountNumber));
+    profileType->setText(QString::fromStdString(a->getAccountType()));
+    profilePhone->setText(QString::fromStdString(a->getPhoneNumber()));
+    profileStatus->setText(QString::fromStdString(a->getStatus()));
+
+    auto all = bank.history(accountNumber);
+    auto recent = all;
+    if(recent.size() > 8)
+        recent.resize(8);
+    fillHistory(recentTable, recent, false);
+
+    if(historyType->currentIndex() > 0)
+    {
+        std::string type = historyType->currentText().toStdString();
+        all.erase(std::remove_if(all.begin(), all.end(), [&](const Transaction& t) { return t.type != type; }),
+                  all.end());
+    }
+    fillHistory(historyTable, all, false);
+
+    requestTable->setRowCount(0);
+    for(const DepositRequest& d : bank.depositRequests(accountNumber))
+    {
+        int row = requestTable->rowCount();
+        requestTable->insertRow(row);
+        auto make = [](const QString& t, bool right = false) {
+            auto* i = new QTableWidgetItem(t);
+            if(right)
+                i->setTextAlignment(Qt::AlignRight | Qt::AlignVCenter);
+            return i;
+        };
+        requestTable->setItem(row, 0, make(QString::number(d.id)));
+        requestTable->setItem(row, 1, make(d.requestedAt));
+        requestTable->setItem(row, 2, make(money(d.amountPaisa), true));
+        auto* st = make(d.status);
+        st->setForeground(d.status == "Approved" ? QColor("#15803d")
+                          : d.status == "Rejected" ? QColor("#b91c1c") : QColor("#b45309"));
+        requestTable->setItem(row, 3, st);
+        requestTable->setItem(row, 4, make(d.decidedAt.isEmpty() ? "-" : d.decidedAt));
+    }
+}
+
+void CustomerWindow::report(const Result& r)
+{
+    if(r.ok)
+        statusBar()->showMessage(r.message, 7000);
+    else
+        QMessageBox::warning(this, "SecureBank", r.message);
+    refresh();
+}
+
+void CustomerWindow::doRequestDeposit()
+{
+    long long amount;
+    if(askAmount(this, "Request deposit", "Enter the amount to deposit. It will be added to your balance after an administrator approves it.", amount))
+        report(bank.requestDeposit(accountNumber, amount));
+}
+
+void CustomerWindow::doWithdraw()
+{
+    const Account* a = bank.find(accountNumber);
+    long long amount;
+    if(!a)
+        return;
+    QString password;
+    if(!askAmount(this, "Withdraw",
+                  QString("Available balance: <b>%1</b>").arg(money(a->getBalancePaisa())), amount, &password))
+        return;
+    if(!bank.verifyPassword(accountNumber, password))
+    {
+        failedPasswords++;
+        if(failedPasswords >= 3)
+        {
+            QMessageBox::critical(this, "SecureBank", "Too many incorrect passwords. You have been signed out.");
+            emit loggedOut();
+            close();
+            return;
+        }
+        QMessageBox::warning(this, "SecureBank",
+                             QString("Incorrect password. Withdrawal cancelled. Attempts remaining: %1")
+                                 .arg(3 - failedPasswords));
+        return;
+    }
+    failedPasswords = 0;
+    Result r = bank.withdraw(accountNumber, amount);
+    report(r);
+    if(r.ok)
+        QMessageBox::information(this, "Withdrawal successful",
+                                 QString("You withdrew <b>%1</b>.<br>%2").arg(money(amount)).arg(r.message.section(". ", 1)));
+}
+
+void CustomerWindow::doTransfer()
+{
+    int from, to;
+    long long amount;
+    QString receiverName;
+    if(askTransfer(this, bank, accountNumber, accountNumber, from, to, amount, receiverName))
+        report(bank.transfer(from, to, amount, receiverName));
+}
+
+void CustomerWindow::doChangePhone()
+{
+    const Account* a = bank.find(accountNumber);
+    if(!a)
+        return;
+    bool ok;
+    QString phone = QString::fromStdString(a->getPhoneNumber());
+    while(true)
+    {
+        phone = QInputDialog::getText(this, "Change phone number", "New phone number (7-15 digits):",
+                                      QLineEdit::Normal, phone, &ok).trimmed();
+        if(!ok)
+            return;
+        QString err = BankService::validatePhone(phone);
+        if(err.isEmpty())
+            break;
+        QMessageBox::warning(this, "Invalid phone number", err);
+    }
+    report(bank.updateAccount(accountNumber, QString::fromStdString(a->getCustomerName()), phone,
+                              QString::fromStdString(a->getAccountType())));
+}
+
+void CustomerWindow::doChangePassword()
+{
+    QString oldPass, newPass;
+    if(askChangePassword(this, oldPass, newPass))
+        report(bank.changePassword(accountNumber, oldPass, newPass));
+}

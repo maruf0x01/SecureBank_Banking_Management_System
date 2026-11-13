@@ -56,7 +56,7 @@ vector<Account> FileManager::loadAccounts(const string& fileName)
                     customerName.empty() || customerName.size() > 50 || phoneNumber.size() < 7 ||
                     phoneNumber.size() > 15 || phoneNumber.find_first_not_of("0123456789") != string::npos ||
                accountType.empty() || parsedBalance < 0 ||
-               (status != "Active" && status != "Closed"))
+               (status != "Active" && status != "Closed" && status != "Pending"))
                 continue;
 
             accounts.emplace_back(parsedAccountNumber, customerName, phoneNumber,

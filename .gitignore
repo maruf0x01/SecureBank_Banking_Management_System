@@ -2,3 +2,13 @@ build/
 securebank
 securebank.exe
 .vscode/
+# runtime data (contains customer info and password hashes)
+data/*.txt
+!data/.gitkeep
+# CMake / Qt build output
+build*/
+CMakeCache.txt
+CMakeFiles/
+cmake_install.cmake
+*_autogen/
+*.png

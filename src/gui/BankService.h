@@ -90,6 +90,7 @@ private:
     bool saveDeposits() const;
     DepositRequest* findDeposit(int id);
 
+    mutable int txnCounter = 0;
     Account* findMutable(int number);
     Transaction makeTransaction(int account, const std::string& type, long long paisa, int related = 0) const;
     bool saveAccounts();

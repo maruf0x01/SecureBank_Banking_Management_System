@@ -24,6 +24,8 @@ transaction_id|account_number|type|amount|date_time|related_account_number
 TXN001|100001|Deposit|100.00|Fri Aug 29 12:00:00 2026|0
 ```
 
+Transaction IDs from the GUI have the form `TXN<unix time><account>-<counter>` (the counter keeps IDs unique within a session). The GUI displays each account as `Holder name (account number)`; if an account was deleted its past transactions show `Deleted account (number)`.
+
 Transfer operations create two records: `Transfer Sent` for the sender and `Transfer Received` for the receiver. A related account number is recorded for transfers and `0` for deposits and withdrawals.
 
 Malformed records are ignored during loading instead of terminating the application.

@@ -56,6 +56,7 @@ AdminWindow::AdminWindow(BankService& bank)
 
     connect(sidebar, &QListWidget::currentRowChanged, this, [this](int row) {
         pages->setCurrentIndex(row);
+        this->bank.reload(); // pick up changes made elsewhere (e.g. new customer requests)
         refreshAll();
     });
     sidebar->setCurrentRow(0);
@@ -271,7 +272,7 @@ void AdminWindow::refreshAll()
     for(const Account& a : bank.accounts())
         if(a.getStatus() == "Pending")
             pending++;
-    sidebar->item(1)->setText(pending ? QString("Accounts  (%1 pending)").arg(pending) : "Accounts");
+    sidebar->item(1)->setText(pending ? QString("Accounts  (%1 new)").arg(pending) : "Accounts");
     int deposits = bank.pendingDepositCount();
     sidebar->item(3)->setText(deposits ? QString("Deposit requests  (%1)").arg(deposits) : "Deposit requests");
 }
@@ -317,7 +318,7 @@ void AdminWindow::refreshDashboard()
 
     if(txns.size() > 15)
         txns.resize(15);
-    fillHistory(recentTable, txns, true);
+    fillHistory(recentTable, bank, txns, true);
 }
 
 void AdminWindow::refreshAccounts()
@@ -372,7 +373,7 @@ void AdminWindow::refreshHistory()
     }
     if(account < 0 || (account == 0 && !historyAccount->text().trimmed().isEmpty()))
         txns.clear();
-    fillHistory(historyTable, txns, true);
+    fillHistory(historyTable, bank, txns, true);
 }
 
 void AdminWindow::updateActions()

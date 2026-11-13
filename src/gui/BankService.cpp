@@ -55,7 +55,9 @@ Transaction BankService::makeTransaction(int account, const std::string& type, l
     auto now = std::chrono::system_clock::to_time_t(std::chrono::system_clock::now());
     std::string timeText = std::ctime(&now);
     timeText.erase(std::remove(timeText.begin(), timeText.end(), '\n'), timeText.end());
-    return {"TXN" + std::to_string(now) + std::to_string(account), account, type, paisa, timeText, related};
+    // The counter keeps IDs unique when several transactions happen within the same second.
+    std::string id = "TXN" + std::to_string(now) + std::to_string(account) + "-" + std::to_string(++txnCounter);
+    return {id, account, type, paisa, timeText, related};
 }
 
 QString BankService::validatePhone(const QString& phone)

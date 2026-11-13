@@ -54,7 +54,7 @@ LoginDialog::LoginDialog(BankService& bank, QWidget* parent)
     auto* cancelButton = makeButton("Exit");
     registerButton = makeButton("New customer? Create a bank account");
     registerButton->setFlat(true);
-    registerButton->setStyleSheet("border: none; color: #2563eb; text-decoration: underline;");
+    registerButton->setStyleSheet("border: none; background: transparent; color: #2563eb; text-decoration: underline;");
 
     auto* buttons = new QHBoxLayout;
     buttons->addWidget(cancelButton);

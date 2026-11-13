@@ -13,7 +13,9 @@ class QPushButton;
 QString money(long long paisa);
 QTableWidget* makeTable(const QStringList& headers);
 QPushButton* makeButton(const QString& text, bool primary = false, bool danger = false);
-void fillHistory(QTableWidget* table, const std::vector<Transaction>& txns, bool showAccountColumn);
+// Fills a transaction table. Accounts are shown as "Holder name (account number)".
+void fillHistory(QTableWidget* table, const BankService& bank, const std::vector<Transaction>& txns,
+                 bool showAccountColumn);
 
 bool askAccountDetails(QWidget* parent, const QString& title, QString& name, QString& phone,
                        QString& type, bool editing);

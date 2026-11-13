@@ -220,7 +220,7 @@ void CustomerWindow::refresh()
     auto recent = all;
     if(recent.size() > 8)
         recent.resize(8);
-    fillHistory(recentTable, recent, false);
+    fillHistory(recentTable, bank, recent, false);
 
     if(historyType->currentIndex() > 0)
     {
@@ -228,7 +228,7 @@ void CustomerWindow::refresh()
         all.erase(std::remove_if(all.begin(), all.end(), [&](const Transaction& t) { return t.type != type; }),
                   all.end());
     }
-    fillHistory(historyTable, all, false);
+    fillHistory(historyTable, bank, all, false);
 
     requestTable->setRowCount(0);
     for(const DepositRequest& d : bank.depositRequests(accountNumber))

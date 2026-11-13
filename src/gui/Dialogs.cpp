@@ -56,13 +56,21 @@ QPushButton* makeButton(const QString& text, bool primary, bool danger)
     return b;
 }
 
-void fillHistory(QTableWidget* table, const std::vector<Transaction>& txns, bool showAccountColumn)
+static QString holderLabel(const BankService& bank, int accountNumber)
+{
+    const Account* a = bank.find(accountNumber);
+    return QString("%1 (%2)").arg(a ? QString::fromStdString(a->getCustomerName()) : "Deleted account")
+        .arg(accountNumber);
+}
+
+void fillHistory(QTableWidget* table, const BankService& bank, const std::vector<Transaction>& txns,
+                 bool showAccountColumn)
 {
     table->setRowCount(0);
     table->setColumnCount(showAccountColumn ? 6 : 5);
-    QStringList headers = {"Date", "Type", "Amount", "Counterparty", "Transaction ID"};
+    QStringList headers = {"Date", "Type", "Amount", "Other party", "Transaction ID"};
     if(showAccountColumn)
-        headers.insert(0, "Account");
+        headers.insert(0, "Account holder");
     table->setHorizontalHeaderLabels(headers);
 
     for(const Transaction& t : txns)
@@ -71,14 +79,14 @@ void fillHistory(QTableWidget* table, const std::vector<Transaction>& txns, bool
         table->insertRow(row);
         int c = 0;
         if(showAccountColumn)
-            table->setItem(row, c++, cell(QString::number(t.accountNumber)));
+            table->setItem(row, c++, cell(holderLabel(bank, t.accountNumber)));
         table->setItem(row, c++, cell(QString::fromStdString(t.dateTime)));
         table->setItem(row, c++, cell(QString::fromStdString(t.type)));
         bool incoming = t.type == "Deposit" || t.type == "Transfer Received";
         auto* amount = cell((incoming ? "+ " : "- ") + money(t.amountPaisa), true);
         amount->setForeground(incoming ? QColor("#15803d") : QColor("#b91c1c"));
         table->setItem(row, c++, amount);
-        table->setItem(row, c++, cell(t.relatedAccountNumber ? QString::number(t.relatedAccountNumber) : "-"));
+        table->setItem(row, c++, cell(t.relatedAccountNumber ? holderLabel(bank, t.relatedAccountNumber) : "-"));
         table->setItem(row, c++, cell(QString::fromStdString(t.transactionId)));
     }
 }

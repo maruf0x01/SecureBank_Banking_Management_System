@@ -1,3 +1,8 @@
+// ============================================================================
+// FILE: BankService.cpp
+// PURPOSE: Implements all business rules, input validations, password hashing,
+//          deposit request workflow, and file persistence for the GUI.
+// ============================================================================
 #include "BankService.h"
 
 #include <QCryptographicHash>
@@ -17,6 +22,7 @@ BankService::BankService()
     reload();
 }
 
+// Reloads accounts, customer logins, and deposit requests from the data/ files.
 void BankService::reload()
 {
     accountList = FileManager::loadAccounts(accountsFile);
@@ -50,6 +56,7 @@ bool BankService::saveFinancial(const std::vector<Transaction>& txns)
     return FileManager::saveAccountsAndTransactions(accountsFile, transactionsFile, accountList, txns);
 }
 
+// Builds a new Transaction record with a unique ID and current timestamp.
 Transaction BankService::makeTransaction(int account, const std::string& type, long long paisa, int related) const
 {
     auto now = std::chrono::system_clock::to_time_t(std::chrono::system_clock::now());
@@ -60,12 +67,14 @@ Transaction BankService::makeTransaction(int account, const std::string& type, l
     return {id, account, type, paisa, timeText, related};
 }
 
+// [PHONE VALIDATION] Must be 7 to 15 digits:
 QString BankService::validatePhone(const QString& phone)
 {
     static const QRegularExpression digits("^[0-9]{7,15}$");
     return digits.match(phone).hasMatch() ? QString() : "Phone number must be 7 to 15 digits only.";
 }
 
+// [NAME VALIDATION] 1 to 50 characters; letters, spaces, '.', '-', and ''' only:
 QString BankService::validateName(const QString& name)
 {
     static const QRegularExpression re("^[\\p{L}][\\p{L} .'-]*$");
@@ -77,11 +86,13 @@ QString BankService::validateName(const QString& name)
     return QString();
 }
 
+// Compares two customer names (case-insensitive, ignoring extra spaces).
 bool BankService::namesMatch(const QString& a, const QString& b)
 {
     return a.simplified().compare(b.simplified(), Qt::CaseInsensitive) == 0;
 }
 
+// Parses a decimal string into integer paisa and checks 0 < paisa <= MaxAmountPaisa.
 bool BankService::parseAmount(const QString& text, long long& paisa)
 {
     try
@@ -95,8 +106,9 @@ bool BankService::parseAmount(const QString& text, long long& paisa)
     }
 }
 
-// ---------- accounts ----------
+// ---------- Account Operations ----------
 
+// Creates a new Active account directly (used by Admin).
 Result BankService::createAccount(const QString& name, const QString& phone, const QString& type)
 {
     QString n = name.trimmed();
@@ -118,6 +130,7 @@ Result BankService::createAccount(const QString& name, const QString& phone, con
     return {true, QString("Account %1 created for %2.").arg(next).arg(n), next};
 }
 
+// Self-registers a new Pending account + login (used by Customer from the login window).
 Result BankService::registerAccount(const QString& name, const QString& phone, const QString& type,
                                     const QString& username, const QString& password)
 {
@@ -155,6 +168,7 @@ Result BankService::registerAccount(const QString& name, const QString& phone, c
     return {true, QString("Account %1 created. It must be activated by an administrator before you can sign in.").arg(next), next};
 }
 
+// Updates customer name, phone number, and account type.
 Result BankService::updateAccount(int number, const QString& name, const QString& phone, const QString& type)
 {
     Account* a = findMutable(number);
@@ -178,6 +192,7 @@ Result BankService::updateAccount(int number, const QString& name, const QString
     return {true, "Account updated."};
 }
 
+// Permanently deletes an account (requires 0 balance), its login, and its deposit requests.
 Result BankService::deleteAccount(int number)
 {
     auto it = std::find_if(accountList.begin(), accountList.end(),
@@ -214,6 +229,7 @@ Result BankService::deleteAccount(int number)
     return {true, QString("Account %1 deleted.").arg(number)};
 }
 
+// Activates a Pending account, reopens a Closed account, or closes an Active account.
 Result BankService::setActive(int number, bool active)
 {
     Account* a = findMutable(number);
@@ -233,6 +249,7 @@ Result BankService::setActive(int number, bool active)
     return {true, active ? (wasPending ? "Account activated." : "Account reopened.") : "Account closed."};
 }
 
+// Immediate deposit (used by Admin and by approveDeposit).
 Result BankService::deposit(int number, long long paisa)
 {
     if(paisa <= 0 || paisa > MaxAmountPaisa)
@@ -252,6 +269,7 @@ Result BankService::deposit(int number, long long paisa)
     return {true, "Deposit successful. New balance: " + QString::fromStdString(formatPaisa(a->getBalancePaisa()))};
 }
 
+// Immediate withdrawal from an Active account.
 Result BankService::withdraw(int number, long long paisa)
 {
     if(paisa <= 0 || paisa > MaxAmountPaisa)
@@ -271,6 +289,7 @@ Result BankService::withdraw(int number, long long paisa)
     return {true, "Withdrawal successful. New balance: " + QString::fromStdString(formatPaisa(a->getBalancePaisa()))};
 }
 
+// Transfers money between two Active accounts (verifies receiver name if expectedReceiverName is provided).
 Result BankService::transfer(int from, int to, long long paisa, const QString& expectedReceiverName)
 {
     if(paisa <= 0 || paisa > MaxAmountPaisa)
@@ -303,6 +322,7 @@ Result BankService::transfer(int from, int to, long long paisa, const QString& e
     return {true, "Transfer successful."};
 }
 
+// Returns transactions in newest-first order (accountNumber == 0 returns all transactions).
 std::vector<Transaction> BankService::history(int accountNumber) const
 {
     std::vector<Transaction> all = FileManager::loadTransactions(transactionsFile);
@@ -313,7 +333,7 @@ std::vector<Transaction> BankService::history(int accountNumber) const
     return out;
 }
 
-// ---------- customer logins ----------
+// ---------- Customer Logins (salted SHA-256 hashes in data/customers.txt) ----------
 
 QString BankService::makeSalt()
 {
@@ -328,6 +348,7 @@ QString BankService::hashPassword(const QString& salt, const QString& password)
     return QCryptographicHash::hash((salt + password).toUtf8(), QCryptographicHash::Sha256).toHex();
 }
 
+// [PASSWORD VALIDATION] 6 to 64 characters, no spaces or '|':
 QString BankService::validatePassword(const QString& password)
 {
     if(password.size() < 6)
@@ -476,7 +497,7 @@ Result BankService::changePassword(int accountNumber, const QString& oldPassword
     return {false, "No login found for this account."};
 }
 
-// ---------- deposit requests ----------
+// ---------- Deposit Requests (stored in data/deposit_requests.txt) ----------
 
 static QString nowText()
 {

@@ -1,3 +1,9 @@
+// ============================================================================
+// FILE: Dialogs.cpp
+// PURPOSE: Implements reusable UI builders (makeButton, makeTable, fillHistory)
+//          and all pop-up form dialogs used by AdminWindow, CustomerWindow,
+//          and LoginDialog.
+// ============================================================================
 #include "Dialogs.h"
 
 #include <QComboBox>
@@ -14,11 +20,13 @@
 #include <QTableWidget>
 #include <QVBoxLayout>
 
+// Converts integer paisa into a 2-decimal string (e.g., 50000 -> "500.00").
 QString money(long long paisa)
 {
     return QString::fromStdString(formatPaisa(paisa));
 }
 
+// Helper: Creates a single read-only table cell (right = true right-aligns numbers/money).
 static QTableWidgetItem* cell(const QString& text, bool right = false)
 {
     auto* item = new QTableWidgetItem(text);
@@ -28,6 +36,7 @@ static QTableWidgetItem* cell(const QString& text, bool right = false)
     return item;
 }
 
+// Helper: Creates a standard styled table with the given column names.
 QTableWidget* makeTable(const QStringList& headers)
 {
     auto* t = new QTableWidget(0, headers.size());
@@ -38,13 +47,16 @@ QTableWidget* makeTable(const QStringList& headers)
     t->setAlternatingRowColors(true);
     t->setShowGrid(false);
     t->verticalHeader()->setVisible(false);
-    t->verticalHeader()->setDefaultSectionSize(34);
+    t->verticalHeader()->setDefaultSectionSize(34); // [ROW HEIGHT] Change 34 to make table rows taller/shorter
     t->horizontalHeader()->setStretchLastSection(true);
     t->horizontalHeader()->setDefaultAlignment(Qt::AlignLeft | Qt::AlignVCenter);
     t->horizontalHeader()->setSectionResizeMode(QHeaderView::ResizeToContents);
     return t;
 }
 
+// Helper: Creates a styled button.
+// - primary = true -> Blue button (styled via QPushButton[primary="true"] in Theme.h)
+// - danger  = true -> Red button  (styled via QPushButton[danger="true"] in Theme.h)
 QPushButton* makeButton(const QString& text, bool primary, bool danger)
 {
     auto* b = new QPushButton(text);
@@ -56,6 +68,7 @@ QPushButton* makeButton(const QString& text, bool primary, bool danger)
     return b;
 }
 
+// Helper: Formats an account as "Customer Name (AccountNumber)" for transaction tables.
 static QString holderLabel(const BankService& bank, int accountNumber)
 {
     const Account* a = bank.find(accountNumber);
@@ -63,11 +76,14 @@ static QString holderLabel(const BankService& bank, int accountNumber)
         .arg(accountNumber);
 }
 
+// Populates a transaction history table (used in Admin Dashboard, Admin Transactions, and Customer views).
 void fillHistory(QTableWidget* table, const BankService& bank, const std::vector<Transaction>& txns,
                  bool showAccountColumn)
 {
     table->setRowCount(0);
     table->setColumnCount(showAccountColumn ? 6 : 5);
+
+    // [TRANSACTION TABLE HEADERS] Change column header names for transaction tables here:
     QStringList headers = {"Date", "Type", "Amount", "Other party", "Transaction ID"};
     if(showAccountColumn)
         headers.insert(0, "Account holder");
@@ -82,15 +98,19 @@ void fillHistory(QTableWidget* table, const BankService& bank, const std::vector
             table->setItem(row, c++, cell(holderLabel(bank, t.accountNumber)));
         table->setItem(row, c++, cell(QString::fromStdString(t.dateTime)));
         table->setItem(row, c++, cell(QString::fromStdString(t.type)));
+
+        // [TRANSACTION AMOUNT COLOR] Green "+ " for money in, Red "- " for money out:
         bool incoming = t.type == "Deposit" || t.type == "Transfer Received";
         auto* amount = cell((incoming ? "+ " : "- ") + money(t.amountPaisa), true);
         amount->setForeground(incoming ? QColor("#15803d") : QColor("#b91c1c"));
         table->setItem(row, c++, amount);
+
         table->setItem(row, c++, cell(t.relatedAccountNumber ? holderLabel(bank, t.relatedAccountNumber) : "-"));
         table->setItem(row, c++, cell(QString::fromStdString(t.transactionId)));
     }
 }
 
+// Helper: Creates a red label for showing inline validation errors inside pop-up dialogs.
 static QLabel* errorLabel()
 {
     auto* l = new QLabel;
@@ -99,6 +119,7 @@ static QLabel* errorLabel()
     return l;
 }
 
+// Helper: Creates the bottom [OK] and [Cancel] buttons for pop-up dialogs.
 static QDialogButtonBox* okCancel(QDialog& d, const QString& okText)
 {
     auto* box = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel);
@@ -108,12 +129,17 @@ static QDialogButtonBox* okCancel(QDialog& d, const QString& okText)
     return box;
 }
 
+// ============================================================================
+// DIALOG 1: New Account / Edit Account Details (used by Admin)
+// ============================================================================
 bool askAccountDetails(QWidget* parent, const QString& title, QString& name, QString& phone,
                        QString& type, bool editing)
 {
     QDialog d(parent);
     d.setWindowTitle(title);
     d.setMinimumWidth(380);
+
+    // Input fields:
     auto* nameEdit = new QLineEdit(name);
     nameEdit->setMaxLength(50);
     nameEdit->setPlaceholderText("Full name");
@@ -121,12 +147,15 @@ bool askAccountDetails(QWidget* parent, const QString& title, QString& name, QSt
     phoneEdit->setMaxLength(15);
     phoneEdit->setPlaceholderText("e.g. 01712345678");
     phoneEdit->setValidator(new QRegularExpressionValidator(QRegularExpression("[0-9]*"), &d));
+
+    // [ACCOUNT TYPES DROPDOWN] Add or rename account types here:
     auto* typeBox = new QComboBox;
     typeBox->addItems({"Savings", "Current", "Student", "Business"});
     if(!type.isEmpty())
         typeBox->setCurrentText(type);
     auto* error = errorLabel();
 
+    // Form labels and submit button text:
     auto* form = new QFormLayout;
     form->addRow("Customer name", nameEdit);
     form->addRow("Phone number", phoneEdit);
@@ -154,6 +183,9 @@ bool askAccountDetails(QWidget* parent, const QString& title, QString& name, QSt
     return true;
 }
 
+// ============================================================================
+// DIALOG 2: Deposit / Withdraw Amount (asks for Password when password != nullptr)
+// ============================================================================
 bool askAmount(QWidget* parent, const QString& title, const QString& summary, long long& paisa,
                QString* password)
 {
@@ -171,6 +203,8 @@ bool askAmount(QWidget* parent, const QString& title, const QString& summary, lo
     layout->addWidget(info);
     layout->addWidget(new QLabel("Amount"));
     layout->addWidget(amountEdit);
+
+    // Optional password field (shown when a customer withdraws money):
     QLineEdit* passEdit = nullptr;
     if(password)
     {
@@ -183,6 +217,7 @@ bool askAmount(QWidget* parent, const QString& title, const QString& summary, lo
     }
     layout->addWidget(error);
     layout->addWidget(box);
+
     QObject::connect(box, &QDialogButtonBox::accepted, &d, [&]() {
         if(!BankService::parseAmount(amountEdit->text(), paisa))
             error->setText("Enter a positive amount with up to two decimals.");
@@ -198,14 +233,18 @@ bool askAmount(QWidget* parent, const QString& title, const QString& summary, lo
     return true;
 }
 
+// ============================================================================
+// DIALOG 3: Transfer / Send Money (verifies receiver name for customers)
+// ============================================================================
 bool askTransfer(QWidget* parent, const BankService& bank, int fixedFrom, int presetFrom,
                  int& from, int& to, long long& paisa, QString& receiverName)
 {
-    const bool verifyName = fixedFrom > 0; // customers must confirm the receiver's name
+    const bool verifyName = fixedFrom > 0; // true for Customer (must type receiver's name), false for Admin
     QDialog d(parent);
     d.setWindowTitle("Transfer money");
     d.setMinimumWidth(420);
 
+    // Sender section: fixed label for Customer, dropdown of active accounts for Admin:
     QComboBox* fromBox = nullptr;
     QLabel* fromInfo = new QLabel;
     if(fixedFrom > 0)
@@ -228,6 +267,7 @@ bool askTransfer(QWidget* parent, const BankService& bank, int fixedFrom, int pr
             fromBox->setCurrentIndex(idx);
     }
 
+    // Receiver account number, receiver name, and amount fields:
     auto* toEdit = new QLineEdit;
     toEdit->setPlaceholderText("Receiver account number");
     toEdit->setValidator(new QRegularExpressionValidator(QRegularExpression("[0-9]{0,9}"), &d));
@@ -241,6 +281,7 @@ bool askTransfer(QWidget* parent, const BankService& bank, int fixedFrom, int pr
     amountEdit->setValidator(new QRegularExpressionValidator(QRegularExpression("[0-9]{0,12}([.][0-9]{0,2})?"), &d));
     auto* error = errorLabel();
 
+    // Live check as user types the receiver's account number:
     QObject::connect(toEdit, &QLineEdit::textChanged, &d, [&]() {
         const Account* a = bank.find(toEdit->text().toInt());
         if(toEdit->text().isEmpty())
@@ -269,6 +310,7 @@ bool askTransfer(QWidget* parent, const BankService& bank, int fixedFrom, int pr
     layout->addWidget(error);
     layout->addWidget(box);
 
+    // Validate transfer inputs and show a confirmation pop-up before sending:
     QObject::connect(box, &QDialogButtonBox::accepted, &d, [&]() {
         int f = fixedFrom > 0 ? fixedFrom : fromBox->currentData().toInt();
         int t = toEdit->text().toInt();
@@ -304,6 +346,9 @@ bool askTransfer(QWidget* parent, const BankService& bank, int fixedFrom, int pr
     return d.exec() == QDialog::Accepted;
 }
 
+// ============================================================================
+// DIALOG 4: Set / Reset Customer Login Credentials (used by Admin)
+// ============================================================================
 bool askCredentials(QWidget* parent, const QString& title, const QString& info, QString& username,
                     QString& password, bool lockUsername)
 {
@@ -347,6 +392,9 @@ bool askCredentials(QWidget* parent, const QString& title, const QString& info, 
     return true;
 }
 
+// ============================================================================
+// DIALOG 5: Change Password (used by Customer on Profile & security page)
+// ============================================================================
 bool askChangePassword(QWidget* parent, QString& oldPassword, QString& newPassword)
 {
     QDialog d(parent);
@@ -386,6 +434,9 @@ bool askChangePassword(QWidget* parent, QString& oldPassword, QString& newPasswo
     return true;
 }
 
+// ============================================================================
+// DIALOG 6: Customer Self-Registration ("Create a bank account" from Login screen)
+// ============================================================================
 bool askRegistration(QWidget* parent, QString& name, QString& phone, QString& type,
                      QString& username, QString& password)
 {
@@ -401,8 +452,11 @@ bool askRegistration(QWidget* parent, QString& name, QString& phone, QString& ty
     auto* phoneEdit = new QLineEdit;
     phoneEdit->setMaxLength(15);
     phoneEdit->setValidator(new QRegularExpressionValidator(QRegularExpression("[0-9]*"), &d));
+
+    // [ACCOUNT TYPES DROPDOWN] Keep in sync with askAccountDetails above:
     auto* typeBox = new QComboBox;
     typeBox->addItems({"Savings", "Current", "Student", "Business"});
+
     auto* userEdit = new QLineEdit;
     userEdit->setPlaceholderText("3-20 letters, digits, _ or .");
     userEdit->setMaxLength(20);

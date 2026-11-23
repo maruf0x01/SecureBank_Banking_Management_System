@@ -1,3 +1,12 @@
+// ============================================================================
+// FILE: CustomerWindow.cpp
+// PURPOSE: Implements the Customer online banking dashboard:
+//          - Left Sidebar ("Overview", "Transactions", "Deposit requests", "Profile & security")
+//          - Overview page (Welcome title, blue Balance Hero Card, Send money / Deposit / Withdraw buttons)
+//          - Transactions page (Customer's transaction history + type filter)
+//          - Deposit requests page ("Request a deposit" button + request status table)
+//          - Profile & security page (Account info card + Change phone / Change password buttons)
+// ============================================================================
 #include "CustomerWindow.h"
 
 #include <QComboBox>
@@ -19,6 +28,7 @@
 CustomerWindow::CustomerWindow(BankService& bank, int accountNumber)
     : bank(bank), accountNumber(accountNumber)
 {
+    // [WINDOW TITLE & SIZE] Change customer window title or initial size (width, height) here:
     setWindowTitle("SecureBank - My Account");
     resize(980, 640);
 
@@ -28,10 +38,10 @@ CustomerWindow::CustomerWindow(BankService& bank, int accountNumber)
     layout->setSpacing(0);
     pages = new QStackedWidget;
     layout->addWidget(buildSidebar());
-    pages->addWidget(buildOverview());
-    pages->addWidget(buildHistory());
-    pages->addWidget(buildRequests());
-    pages->addWidget(buildProfile());
+    pages->addWidget(buildOverview()); // Page index 0
+    pages->addWidget(buildHistory());  // Page index 1
+    pages->addWidget(buildRequests()); // Page index 2
+    pages->addWidget(buildProfile());  // Page index 3
     layout->addWidget(pages, 1);
     setCentralWidget(central);
 
@@ -43,25 +53,34 @@ CustomerWindow::CustomerWindow(BankService& bank, int accountNumber)
     refresh();
 }
 
+// ============================================================================
+// LEFT SIDEBAR: Brand logo, navigation menu items, and "Sign out" button
+// ============================================================================
 QWidget* CustomerWindow::buildSidebar()
 {
     auto* panel = new QWidget;
-    panel->setFixedWidth(200);
+    panel->setFixedWidth(200); // [SIDEBAR WIDTH] Change 200 to make sidebar wider/narrower
     panel->setObjectName("sidePanel");
     panel->setAttribute(Qt::WA_StyledBackground, true);
     auto* v = new QVBoxLayout(panel);
     v->setContentsMargins(0, 0, 0, 12);
     v->setSpacing(0);
+
+    // [SIDEBAR BRAND TEXT] Top-left logo title and subtitle:
     auto* brand = new QLabel("SecureBank");
     brand->setObjectName("brand");
     auto* sub = new QLabel("Online banking");
     sub->setObjectName("brandSub");
+
+    // [SIDEBAR MENU ITEMS] Change customer sidebar menu names here:
     sidebar = new QListWidget;
     sidebar->setObjectName("sidebar");
     sidebar->addItems({"Overview", "Transactions", "Deposit requests", "Profile & security"});
     sidebar->setFocusPolicy(Qt::NoFocus);
     for(int i = 0; i < sidebar->count(); i++)
         sidebar->item(i)->setSizeHint(QSize(0, 44));
+
+    // [SIGN OUT BUTTON] Bottom red Sign out button:
     auto* logout = new QPushButton("Sign out");
     logout->setProperty("logout", true);
     connect(logout, &QPushButton::clicked, this, [this] {
@@ -75,21 +94,26 @@ QWidget* CustomerWindow::buildSidebar()
     return panel;
 }
 
+// ============================================================================
+// PAGE 0: OVERVIEW (Welcome heading, Blue Balance Hero Card, Action buttons, Recent activity)
+// ============================================================================
 QWidget* CustomerWindow::buildOverview()
 {
     auto* page = new QWidget;
     auto* v = new QVBoxLayout(page);
     v->setContentsMargins(24, 20, 24, 20);
 
+    // [WELCOME HEADING] Filled dynamically with "Welcome, <Name>" in refresh():
     welcomeLabel = new QLabel;
     welcomeLabel->setObjectName("pageTitle");
     v->addWidget(welcomeLabel);
 
+    // [HERO BALANCE CARD] Blue gradient card showing "Available balance" and account number:
     auto* hero = new QFrame;
     hero->setObjectName("heroCard");
     auto* hv = new QVBoxLayout(hero);
     hv->setContentsMargins(24, 20, 24, 20);
-    auto* caption = new QLabel("Available balance");
+    auto* caption = new QLabel("Available balance"); // Text above the balance number
     caption->setObjectName("onBlue");
     balanceLabel = new QLabel;
     balanceLabel->setObjectName("balanceValue");
@@ -100,17 +124,20 @@ QWidget* CustomerWindow::buildOverview()
     hv->addWidget(accountLabel);
     v->addWidget(hero);
 
+    // [QUICK ACTION BUTTONS] "Send money", "Deposit", and "Withdraw" below the balance card:
     statusLabel = new QLabel;
     statusLabel->setObjectName("subtle");
-    auto* deposit = makeButton("Deposit", false);
+    auto* deposit = makeButton("Deposit", false);     // Change false -> true to make it blue
     deposit->setMinimumHeight(38);
     connect(deposit, &QPushButton::clicked, this, [this] { doRequestDeposit(); });
     auto* withdraw = makeButton("Withdraw", false);
-    auto* transfer = makeButton("Send money", true);
+    auto* transfer = makeButton("Send money", true);  // true = Blue primary button
     withdraw->setMinimumHeight(38);
     transfer->setMinimumHeight(38);
     connect(withdraw, &QPushButton::clicked, this, [this] { doWithdraw(); });
     connect(transfer, &QPushButton::clicked, this, [this] { doTransfer(); });
+
+    // [BUTTON ORDER] Change the order of row->addWidget(...) to move buttons left/right:
     auto* row = new QHBoxLayout;
     row->addWidget(transfer);
     row->addWidget(deposit);
@@ -119,6 +146,7 @@ QWidget* CustomerWindow::buildOverview()
     row->addWidget(statusLabel);
     v->addLayout(row);
 
+    // [RECENT ACTIVITY TABLE] Shows the customer's 8 latest transactions:
     v->addSpacing(6);
     v->addWidget(new QLabel("<b>Recent activity</b>"));
     recentTable = makeTable({});
@@ -126,6 +154,9 @@ QWidget* CustomerWindow::buildOverview()
     return page;
 }
 
+// ============================================================================
+// PAGE 1: TRANSACTIONS (Type filter dropdown + complete transaction history table)
+// ============================================================================
 QWidget* CustomerWindow::buildHistory()
 {
     auto* page = new QWidget;
@@ -144,6 +175,9 @@ QWidget* CustomerWindow::buildHistory()
     return page;
 }
 
+// ============================================================================
+// PAGE 2: DEPOSIT REQUESTS ("Request a deposit" button + requests status table)
+// ============================================================================
 QWidget* CustomerWindow::buildRequests()
 {
     auto* page = new QWidget;
@@ -161,6 +195,9 @@ QWidget* CustomerWindow::buildRequests()
     return page;
 }
 
+// ============================================================================
+// PAGE 3: PROFILE & SECURITY (Account details card + Change phone / password buttons)
+// ============================================================================
 QWidget* CustomerWindow::buildProfile()
 {
     auto* page = new QWidget;
@@ -168,6 +205,7 @@ QWidget* CustomerWindow::buildProfile()
     v->setContentsMargins(24, 20, 24, 20);
     makeTitle("Profile & security", "Your account details and sign-in settings.", v);
 
+    // [PROFILE CARD] Displays Name, Account number, Account type, Phone, and Status:
     auto* card = makeCard();
     auto* form = new QFormLayout(card);
     form->setContentsMargins(20, 16, 20, 16);
@@ -184,6 +222,7 @@ QWidget* CustomerWindow::buildProfile()
     form->addRow("Status", profileStatus);
     v->addWidget(card);
 
+    // [PROFILE BUTTONS] "Change phone number" and "Change password":
     auto* phone = makeButton("Change phone number");
     auto* pass = makeButton("Change password");
     connect(phone, &QPushButton::clicked, this, [this] { doChangePhone(); });
@@ -197,6 +236,9 @@ QWidget* CustomerWindow::buildProfile()
     return page;
 }
 
+// ---------- Data Refresh & Customer Action Handlers ----------
+
+// Reloads data from disk and updates all labels and tables across the customer pages.
 void CustomerWindow::refresh()
 {
     bank.reload(); // pick up changes made by an administrator
@@ -204,6 +246,8 @@ void CustomerWindow::refresh()
     if(!a)
         return;
     QString name = QString::fromStdString(a->getCustomerName());
+
+    // [OVERVIEW TEXTS] Welcome heading, balance number, and account subtitle:
     welcomeLabel->setText("Welcome, " + name);
     balanceLabel->setText(money(a->getBalancePaisa()));
     accountLabel->setText(QString("%1 account  -  No. %2").arg(QString::fromStdString(a->getAccountType())).arg(accountNumber));
@@ -261,6 +305,7 @@ void CustomerWindow::report(const Result& r)
     refresh();
 }
 
+// Triggered by "Deposit" / "Request a deposit" button:
 void CustomerWindow::doRequestDeposit()
 {
     long long amount;
@@ -268,6 +313,7 @@ void CustomerWindow::doRequestDeposit()
         report(bank.requestDeposit(accountNumber, amount));
 }
 
+// Triggered by "Withdraw" button (verifies customer password and shows confirmation pop-up):
 void CustomerWindow::doWithdraw()
 {
     const Account* a = bank.find(accountNumber);
@@ -296,11 +342,13 @@ void CustomerWindow::doWithdraw()
     failedPasswords = 0;
     Result r = bank.withdraw(accountNumber, amount);
     report(r);
+    // [WITHDRAWAL POPUP] Shown after a customer successfully withdraws money:
     if(r.ok)
         QMessageBox::information(this, "Withdrawal successful",
                                  QString("You withdrew <b>%1</b>.<br>%2").arg(money(amount)).arg(r.message.section(". ", 1)));
 }
 
+// Triggered by "Send money" button:
 void CustomerWindow::doTransfer()
 {
     int from, to;
@@ -310,6 +358,7 @@ void CustomerWindow::doTransfer()
         report(bank.transfer(from, to, amount, receiverName));
 }
 
+// Triggered by "Change phone number" button:
 void CustomerWindow::doChangePhone()
 {
     const Account* a = bank.find(accountNumber);
@@ -332,6 +381,7 @@ void CustomerWindow::doChangePhone()
                               QString::fromStdString(a->getAccountType())));
 }
 
+// Triggered by "Change password" button:
 void CustomerWindow::doChangePassword()
 {
     QString oldPass, newPass;

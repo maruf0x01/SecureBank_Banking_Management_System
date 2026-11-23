@@ -1,3 +1,12 @@
+// ============================================================================
+// FILE: AdminWindow.cpp
+// PURPOSE: Implements the Administrator dashboard and management screens:
+//          - Left Sidebar ("Dashboard", "Accounts", "Transactions", "Deposit requests")
+//          - Dashboard page (8 summary stat cards + recent transactions table)
+//          - Accounts page (search, filter, table, and 10 action buttons)
+//          - Transactions page (full history with account & type filters)
+//          - Deposit requests page ("Approve" and "Reject" customer deposits)
+// ============================================================================
 #include "AdminWindow.h"
 
 #include <QAction>
@@ -25,6 +34,7 @@
 
 namespace
 {
+// Helper: Creates a table cell item (right = true aligns money/numbers to the right).
 QTableWidgetItem* cell(const QString& text, bool right = false)
 {
     auto* item = new QTableWidgetItem(text);
@@ -37,6 +47,7 @@ QTableWidgetItem* cell(const QString& text, bool right = false)
 AdminWindow::AdminWindow(BankService& bank)
     : bank(bank)
 {
+    // [WINDOW TITLE & SIZE] Change admin window title or initial size (width, height) here:
     setWindowTitle("SecureBank - Administrator");
     resize(1100, 680);
 
@@ -45,15 +56,17 @@ AdminWindow::AdminWindow(BankService& bank)
     layout->setContentsMargins(0, 0, 0, 0);
     layout->setSpacing(0);
 
+    // Add left sidebar and the 4 main pages on the right:
     pages = new QStackedWidget;
     layout->addWidget(buildSidebar());
-    pages->addWidget(buildDashboard());
-    pages->addWidget(buildAccounts());
-    pages->addWidget(buildTransactions());
-    pages->addWidget(buildRequests());
+    pages->addWidget(buildDashboard());     // Page index 0
+    pages->addWidget(buildAccounts());      // Page index 1
+    pages->addWidget(buildTransactions());  // Page index 2
+    pages->addWidget(buildRequests());      // Page index 3
     layout->addWidget(pages, 1);
     setCentralWidget(central);
 
+    // When clicking a sidebar menu item, switch to that page and reload fresh data from disk:
     connect(sidebar, &QListWidget::currentRowChanged, this, [this](int row) {
         pages->setCurrentIndex(row);
         this->bank.reload(); // pick up changes made elsewhere (e.g. new customer requests)
@@ -61,6 +74,8 @@ AdminWindow::AdminWindow(BankService& bank)
     });
     sidebar->setCurrentRow(0);
     refreshAll();
+
+    // Auto-jump to Deposit requests or Pending Accounts on login if any are waiting for admin approval:
     int pending = 0;
     for(const Account& a : bank.accounts())
         if(a.getStatus() == "Pending")
@@ -79,20 +94,26 @@ AdminWindow::AdminWindow(BankService& bank)
     }
 }
 
+// ============================================================================
+// LEFT SIDEBAR: Brand logo, navigation menu items, "Reload data" & "Sign out"
+// ============================================================================
 QWidget* AdminWindow::buildSidebar()
 {
     auto* panel = new QWidget;
-    panel->setFixedWidth(210);
+    panel->setFixedWidth(210); // [SIDEBAR WIDTH] Change 210 to make sidebar wider/narrower
     panel->setObjectName("sidePanel");
     panel->setAttribute(Qt::WA_StyledBackground, true);
     auto* v = new QVBoxLayout(panel);
     v->setContentsMargins(0, 0, 0, 12);
     v->setSpacing(0);
 
+    // [SIDEBAR BRAND TEXT] Top-left logo title and subtitle:
     auto* brand = new QLabel("SecureBank");
     brand->setObjectName("brand");
     auto* sub = new QLabel("Administrator");
     sub->setObjectName("brandSub");
+
+    // [SIDEBAR MENU ITEMS] Change sidebar page names here:
     sidebar = new QListWidget;
     sidebar->setObjectName("sidebar");
     sidebar->addItems({"Dashboard", "Accounts", "Transactions", "Deposit requests"});
@@ -100,9 +121,10 @@ QWidget* AdminWindow::buildSidebar()
     for(int i = 0; i < sidebar->count(); i++)
         sidebar->item(i)->setSizeHint(QSize(0, 44));
 
+    // [SIDEBAR BOTTOM BUTTONS] "Reload data" and "Sign out":
     auto* refresh = new QPushButton("Reload data");
     auto* logout = new QPushButton("Sign out");
-    logout->setProperty("logout", true);
+    logout->setProperty("logout", true); // Makes "Sign out" red via Theme.h
     connect(refresh, &QPushButton::clicked, this, [this] { doReload(); });
     connect(logout, &QPushButton::clicked, this, [this] {
         emit loggedOut();
@@ -116,13 +138,19 @@ QWidget* AdminWindow::buildSidebar()
     return panel;
 }
 
+// ============================================================================
+// PAGE 0: DASHBOARD (8 statistic cards + Recent transactions table)
+// ============================================================================
 QWidget* AdminWindow::buildDashboard()
 {
     auto* page = new QWidget;
     auto* v = new QVBoxLayout(page);
     v->setContentsMargins(24, 20, 24, 20);
+
+    // [PAGE TITLE] Dashboard heading and subtitle:
     makeTitle("Dashboard", "Overview of the bank", v);
 
+    // [DASHBOARD STAT CARDS] 2 rows x 4 columns grid (row, col):
     auto* grid = new QGridLayout;
     grid->addWidget(makeStatCard("Total accounts", totalAccountsValue), 0, 0);
     grid->addWidget(makeStatCard("Active accounts", activeValue), 0, 1);
@@ -138,6 +166,7 @@ QWidget* AdminWindow::buildDashboard()
     grid->addWidget(typeCard, 1, 3);
     v->addLayout(grid);
 
+    // [RECENT TRANSACTIONS SECTION] Heading and table on the dashboard:
     auto* recentTitle = new QLabel("<b>Recent transactions</b>");
     v->addSpacing(8);
     v->addWidget(recentTitle);
@@ -146,13 +175,19 @@ QWidget* AdminWindow::buildDashboard()
     return page;
 }
 
+// ============================================================================
+// PAGE 1: ACCOUNTS (Search box, status filter, accounts table, action buttons)
+// ============================================================================
 QWidget* AdminWindow::buildAccounts()
 {
     auto* page = new QWidget;
     auto* v = new QVBoxLayout(page);
     v->setContentsMargins(24, 20, 24, 20);
+
+    // [PAGE TITLE] Accounts heading and subtitle:
     makeTitle("Accounts", "Create, edit and manage customer accounts. Right-click a row for more actions.", v);
 
+    // [SEARCH & FILTER BAR] Search input box and Status dropdown:
     searchEdit = new QLineEdit;
     searchEdit->setPlaceholderText("Search by account number, name or phone...");
     searchEdit->setClearButtonEnabled(true);
@@ -164,22 +199,25 @@ QWidget* AdminWindow::buildAccounts()
     filterRow->addWidget(statusFilter);
     v->addLayout(filterRow);
 
+    // [ACCOUNTS TABLE] Change column header names here:
     accountTable = makeTable({"Account No.", "Customer", "Phone", "Type", "Balance", "Status", "Login"});
     accountTable->setContextMenuPolicy(Qt::CustomContextMenu);
     v->addWidget(accountTable, 1);
 
+    // [ACCOUNT ACTION BUTTONS] Change button labels here (used for both buttons and right-click menu):
     newAct = new QAction("New account", this);
     editAct = new QAction("Edit details", this);
     depositAct = new QAction("Deposit", this);
     withdrawAct = new QAction("Withdraw", this);
     transferAct = new QAction("Transfer", this);
-    toggleAct = new QAction("Close account", this);
+    toggleAct = new QAction("Close account", this); // Dynamically changes to "Activate account" / "Reopen account"
     loginAct = new QAction("Set customer login", this);
     removeLoginAct = new QAction("Remove customer login", this);
     historyAct = new QAction("View history", this);
     deleteAct = new QAction("Delete account", this);
     newAct->setShortcut(QKeySequence::New);
 
+    // Connect each action to its handler function:
     connect(newAct, &QAction::triggered, this, [this] { doNew(); });
     connect(editAct, &QAction::triggered, this, [this] { doEdit(); });
     connect(depositAct, &QAction::triggered, this, [this] { doDeposit(); });
@@ -191,6 +229,7 @@ QWidget* AdminWindow::buildAccounts()
     connect(historyAct, &QAction::triggered, this, [this] { doHistory(); });
     connect(deleteAct, &QAction::triggered, this, [this] { doDelete(); });
 
+    // Helper lambda to create a QPushButton linked to a QAction:
     auto addButton = [&](QHBoxLayout* row, QAction* act, bool primary = false, bool danger = false) {
         QPushButton* b = makeButton(act->text(), primary, danger);
         connect(b, &QPushButton::clicked, act, &QAction::trigger);
@@ -200,20 +239,23 @@ QWidget* AdminWindow::buildAccounts()
         });
         row->addWidget(b);
     };
+
+    // [BUTTON ROWS LAYOUT] Move addButton(...) between row1 and row2 to rearrange buttons:
     auto* row1 = new QHBoxLayout;
-    addButton(row1, newAct, true);
+    addButton(row1, newAct, true); // true = Blue primary button
     addButton(row1, editAct);
     addButton(row1, depositAct);
     addButton(row1, withdrawAct);
     addButton(row1, transferAct);
     row1->addStretch();
+
     auto* row2 = new QHBoxLayout;
     addButton(row2, historyAct);
     addButton(row2, loginAct);
     addButton(row2, removeLoginAct);
     row2->addStretch();
     addButton(row2, toggleAct);
-    addButton(row2, deleteAct, false, true);
+    addButton(row2, deleteAct, false, true); // danger = true (Red button)
     v->addLayout(row1);
     v->addLayout(row2);
 
@@ -226,13 +268,19 @@ QWidget* AdminWindow::buildAccounts()
     return page;
 }
 
+// ============================================================================
+// PAGE 2: TRANSACTIONS (Filter by account number / type + full history table)
+// ============================================================================
 QWidget* AdminWindow::buildTransactions()
 {
     auto* page = new QWidget;
     auto* v = new QVBoxLayout(page);
     v->setContentsMargins(24, 20, 24, 20);
+
+    // [PAGE TITLE] Transactions heading and subtitle:
     makeTitle("Transactions", "Browse the transaction history of every account.", v);
 
+    // [FILTER BAR] Account number search box and transaction type dropdown:
     historyAccount = new QLineEdit;
     historyAccount->setPlaceholderText("Filter by account number (blank = all)");
     historyAccount->setClearButtonEnabled(true);
@@ -252,7 +300,7 @@ QWidget* AdminWindow::buildTransactions()
     return page;
 }
 
-// ---------- refresh ----------
+// ---------- Data Refresh & Table Population ----------
 
 int AdminWindow::selectedAccount() const
 {
@@ -262,6 +310,7 @@ int AdminWindow::selectedAccount() const
     return accountTable->item(row, 0)->text().toInt();
 }
 
+// Refreshes all 4 pages and updates the pending badge counters on the sidebar.
 void AdminWindow::refreshAll()
 {
     refreshDashboard();
@@ -272,11 +321,13 @@ void AdminWindow::refreshAll()
     for(const Account& a : bank.accounts())
         if(a.getStatus() == "Pending")
             pending++;
+    // [SIDEBAR BADGE TEXT] Shows how many new accounts or deposit requests are waiting:
     sidebar->item(1)->setText(pending ? QString("Accounts  (%1 new)").arg(pending) : "Accounts");
     int deposits = bank.pendingDepositCount();
     sidebar->item(3)->setText(deposits ? QString("Deposit requests  (%1)").arg(deposits) : "Deposit requests");
 }
 
+// Calculates totals and updates the 8 stat cards + recent transactions on the Dashboard page.
 void AdminWindow::refreshDashboard()
 {
     long long balance = 0, deposits = 0, withdrawals = 0, transfers = 0;
@@ -316,11 +367,13 @@ void AdminWindow::refreshDashboard()
     typeBreakdown->setText(parts.isEmpty() ? "-" : parts.join("\n"));
     typeBreakdown->setStyleSheet("font-size: 12px;");
 
+    // Show at most 15 recent transactions on the Dashboard:
     if(txns.size() > 15)
         txns.resize(15);
     fillHistory(recentTable, bank, txns, true);
 }
 
+// Populates the Accounts table based on the search box and status filter dropdown.
 void AdminWindow::refreshAccounts()
 {
     const QString filter = searchEdit->text().trimmed();
@@ -348,6 +401,7 @@ void AdminWindow::refreshAccounts()
         accountTable->setItem(row, 3, cell(QString::fromStdString(a.getAccountType())));
         accountTable->setItem(row, 4, cell(money(a.getBalancePaisa()), true));
         auto* s = cell(st);
+        // [STATUS COLORS] Green for Active, Orange for Pending, Red for Closed:
         s->setForeground(st == "Active" ? QColor("#15803d") : st == "Pending" ? QColor("#b45309") : QColor("#b91c1c"));
         accountTable->setItem(row, 5, s);
         QString login = bank.loginName(a.getAccountNumber());
@@ -358,6 +412,7 @@ void AdminWindow::refreshAccounts()
     updateActions();
 }
 
+// Populates the Transactions table filtered by account number and transaction type.
 void AdminWindow::refreshHistory()
 {
     int account = 0;
@@ -376,6 +431,7 @@ void AdminWindow::refreshHistory()
     fillHistory(historyTable, bank, txns, true);
 }
 
+// Enables/disables buttons and updates dynamic button labels depending on which account is selected.
 void AdminWindow::updateActions()
 {
     int n = selectedAccount();
@@ -388,6 +444,7 @@ void AdminWindow::updateActions()
     transferAct->setEnabled(true);
     toggleAct->setEnabled(sel);
     bool pending = sel && a->getStatus() == "Pending";
+    // [DYNAMIC BUTTON TEXT] Changes between "Activate account", "Reopen account", and "Close account":
     toggleAct->setText(pending ? "Activate account" : sel && !active ? "Reopen account" : "Close account");
     loginAct->setEnabled(sel);
     loginAct->setText(sel && bank.hasLogin(n) ? "Reset customer login" : "Set customer login");
@@ -397,6 +454,7 @@ void AdminWindow::updateActions()
     newAct->setEnabled(true);
 }
 
+// Shows success messages in the bottom status bar or error messages in a warning pop-up.
 void AdminWindow::report(const Result& r)
 {
     if(r.ok)
@@ -406,6 +464,7 @@ void AdminWindow::report(const Result& r)
     refreshAll();
 }
 
+// Shows the right-click context menu on a row in the Accounts table.
 void AdminWindow::showAccountMenu(const QPoint& pos)
 {
     if(!accountTable->itemAt(pos))
@@ -420,7 +479,7 @@ void AdminWindow::showAccountMenu(const QPoint& pos)
     menu.exec(accountTable->viewport()->mapToGlobal(pos));
 }
 
-// ---------- actions ----------
+// ---------- Account Button Click Handlers ----------
 
 void AdminWindow::doReload()
 {
@@ -438,7 +497,7 @@ void AdminWindow::doNew()
     report(r);
     if(r.ok)
     {
-        // Select the newly created account and offer to set up its customer login.
+        // Select the newly created account and offer to set up its customer login immediately:
         searchEdit->clear();
         statusFilter->setCurrentIndex(0);
         refreshAccounts();
@@ -493,6 +552,7 @@ void AdminWindow::doWithdraw()
     {
         Result r = bank.withdraw(number, amount);
         report(r);
+        // [WITHDRAWAL POPUP] Shown after an admin withdraws money from an account:
         if(r.ok)
             QMessageBox::information(this, "Withdrawal successful",
                                      QString("Withdrew <b>%1</b> from account %2.<br>%3")
@@ -591,27 +651,32 @@ void AdminWindow::doHistory()
     sidebar->setCurrentRow(2);
 }
 
-// ---------- deposit requests ----------
-
+// ============================================================================
+// PAGE 3: DEPOSIT REQUESTS (Filter + Approve/Reject buttons + requests table)
+// ============================================================================
 QWidget* AdminWindow::buildRequests()
 {
     auto* page = new QWidget;
     auto* v = new QVBoxLayout(page);
     v->setContentsMargins(24, 20, 24, 20);
+
+    // [PAGE TITLE] Deposit requests heading and subtitle:
     makeTitle("Deposit requests", "Customers request deposits here. Approving credits the account immediately.", v);
 
+    // [FILTER & ACTION BUTTONS] Status filter dropdown + "Approve" and "Reject" buttons:
     requestFilter = new QComboBox;
     requestFilter->addItems({"Pending", "Approved", "Rejected", "All"});
     auto* row = new QHBoxLayout;
     row->addWidget(new QLabel("Show:"));
     row->addWidget(requestFilter);
     row->addStretch();
-    approveBtn = makeButton("Approve", true);
-    rejectBtn = makeButton("Reject", false, true);
+    approveBtn = makeButton("Approve", true);      // Blue primary button
+    rejectBtn = makeButton("Reject", false, true); // Red danger button
     row->addWidget(approveBtn);
     row->addWidget(rejectBtn);
     v->addLayout(row);
 
+    // [DEPOSIT REQUESTS TABLE] Change column headers here:
     requestTable = makeTable({"Request ID", "Requested", "Account", "Customer", "Amount", "Status", "Decided"});
     v->addWidget(requestTable, 1);
 

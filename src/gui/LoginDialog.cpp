@@ -2,7 +2,7 @@
 // FILE: LoginDialog.cpp
 // PURPOSE: Builds and handles the Sign-In window UI:
 //          - Customer / Admin tab buttons
-//          - Username & Password fields + "Show password" checkbox
+//          - Username & Password fields + "Show password" checkbox + "Forgot password?" link
 //          - "Sign in", "Exit", and "New customer? Create a bank account" buttons
 //          - Admin credentials check ("admin" / "admin123") and 3-attempt limit
 // ============================================================================
@@ -44,7 +44,7 @@ LoginDialog::LoginDialog(BankService& bank, QWidget* parent)
     tabs->addWidget(customerTab);
     tabs->addWidget(adminTab);
 
-    // [INPUT FIELDS] Username and Password boxes + "Show password" checkbox:
+    // [INPUT FIELDS] Username and Password boxes + "Show password" checkbox + "Forgot password?" link:
     usernameEdit = new QLineEdit;
     usernameEdit->setPlaceholderText("Username"); // Placeholder inside username box
     passwordEdit = new QLineEdit;
@@ -53,6 +53,16 @@ LoginDialog::LoginDialog(BankService& bank, QWidget* parent)
     passwordEdit->setMaxLength(64);
     passwordEdit->setEchoMode(QLineEdit::Password);
     auto* showPassword = new QCheckBox("Show password"); // Checkbox text
+
+    // [FORGOT PASSWORD LINK] Shown on the right side opposite "Show password":
+    forgotButton = makeButton("Forgot password?");
+    forgotButton->setFlat(true);
+    forgotButton->setStyleSheet("border: none; background: transparent; color: #2563eb; text-decoration: underline; padding: 2px;");
+
+    auto* optionsRow = new QHBoxLayout;
+    optionsRow->addWidget(showPassword);
+    optionsRow->addStretch();
+    optionsRow->addWidget(forgotButton);
 
     // [LABELS] Red error message label and gray hint label:
     messageLabel = new QLabel;
@@ -86,7 +96,7 @@ LoginDialog::LoginDialog(BankService& bank, QWidget* parent)
     layout->addLayout(tabs);
     layout->addWidget(usernameEdit);
     layout->addWidget(passwordEdit);
-    layout->addWidget(showPassword);
+    layout->addLayout(optionsRow);
     layout->addWidget(messageLabel);
     layout->addLayout(buttons);
     layout->addWidget(hintLabel);
@@ -98,6 +108,7 @@ LoginDialog::LoginDialog(BankService& bank, QWidget* parent)
     connect(showPassword, &QCheckBox::toggled, this, [this](bool on) {
         passwordEdit->setEchoMode(on ? QLineEdit::Normal : QLineEdit::Password);
     });
+    connect(forgotButton, &QPushButton::clicked, this, &LoginDialog::openForgotPassword);
     connect(registerButton, &QPushButton::clicked, this, &LoginDialog::openRegistration);
     connect(loginButton, &QPushButton::clicked, this, &LoginDialog::attemptLogin);
     connect(cancelButton, &QPushButton::clicked, this, &QDialog::reject);
@@ -123,19 +134,20 @@ void LoginDialog::setRole(Role role)
     }
     // [HINT TEXT] Shown when Admin tab is selected:
     hintLabel->setText(role == Customer ? "" : "Administrator access.");
-    // Hide the registration link on the Admin tab:
+    // Hide the registration and forgot-password links on the Admin tab:
     registerButton->setVisible(role == Customer);
+    forgotButton->setVisible(role == Customer);
     messageLabel->clear();
     usernameEdit->setFocus();
 }
 
-// Opens the "Create a bank account" pop-up dialog when a new customer clicks the registration link.
+// Opens the "Create a bank account" pop-up dialog (with 3 security questions) for new customers.
 void LoginDialog::openRegistration()
 {
-    QString name, phone, type, username, password;
-    if(!askRegistration(this, name, phone, type, username, password))
+    QString name, phone, type, username, password, ans1, ans2, ans3;
+    if(!askRegistration(this, name, phone, type, username, password, ans1, ans2, ans3))
         return;
-    Result r = bank.registerAccount(name, phone, type, username, password);
+    Result r = bank.registerAccount(name, phone, type, username, password, ans1, ans2, ans3);
     if(r.ok)
     {
         // [POPUP] Shown after a customer submits a new account registration:
@@ -146,6 +158,19 @@ void LoginDialog::openRegistration()
     }
     else
         QMessageBox::warning(this, "Could not create account", r.message);
+}
+
+// Opens the "Forgot password" pop-up dialog where the customer answers their 3 security questions.
+void LoginDialog::openForgotPassword()
+{
+    QString username = usernameEdit->text().trimmed();
+    if(askForgotPassword(this, bank, username))
+    {
+        usernameEdit->setText(username);
+        passwordEdit->clear();
+        messageLabel->clear();
+        passwordEdit->setFocus();
+    }
 }
 
 // Validates credentials when the user clicks "Sign in".

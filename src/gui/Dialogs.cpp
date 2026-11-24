@@ -521,15 +521,157 @@ bool askChangePassword(QWidget* parent, QString& oldPassword, QString& newPasswo
 }
 
 // ============================================================================
+// DIALOG 5B: Update 3 Security Questions (used by Customer on Profile & security page)
+// ============================================================================
+bool askSecurityQuestions(QWidget* parent, QString& ans1, QString& ans2, QString& ans3)
+{
+    QDialog d(parent);
+    d.setWindowTitle("Security questions");
+    d.setMinimumWidth(420);
+
+    const QStringList questions = BankService::securityQuestions();
+    auto* info = new QLabel("Set or update your 3 security answers. These answers allow you to reset "
+                            "your password if you ever forget it (case-insensitive).");
+    info->setWordWrap(true);
+    info->setObjectName("subtle");
+
+    auto* q1Edit = new QLineEdit;
+    auto* q2Edit = new QLineEdit;
+    auto* q3Edit = new QLineEdit;
+    for(auto* e : {q1Edit, q2Edit, q3Edit})
+        e->setMaxLength(50);
+
+    auto* error = errorLabel();
+    auto* box = okCancel(d, "Save answers");
+    auto* layout = new QVBoxLayout(&d);
+    layout->addWidget(info);
+    layout->addWidget(new QLabel(questions[0]));
+    layout->addWidget(q1Edit);
+    layout->addWidget(new QLabel(questions[1]));
+    layout->addWidget(q2Edit);
+    layout->addWidget(new QLabel(questions[2]));
+    layout->addWidget(q3Edit);
+    layout->addWidget(error);
+    layout->addWidget(box);
+
+    QObject::connect(box, &QDialogButtonBox::accepted, &d, [&]() {
+        if(q1Edit->text().simplified().isEmpty() || q2Edit->text().simplified().isEmpty() ||
+           q3Edit->text().simplified().isEmpty())
+            error->setText("Please answer all 3 security questions.");
+        else if(q1Edit->text().contains('|') || q2Edit->text().contains('|') || q3Edit->text().contains('|'))
+            error->setText("Answers cannot contain '|'.");
+        else
+            d.accept();
+    });
+    if(d.exec() != QDialog::Accepted)
+        return false;
+    ans1 = q1Edit->text().simplified();
+    ans2 = q2Edit->text().simplified();
+    ans3 = q3Edit->text().simplified();
+    return true;
+}
+
+// ============================================================================
+// DIALOG 5C: Forgot Password (verifies 3 security questions & resets password)
+// ============================================================================
+bool askForgotPassword(QWidget* parent, BankService& bank, QString& usernameOut)
+{
+    QDialog d(parent);
+    d.setWindowTitle("Forgot password - Reset password");
+    d.setMinimumWidth(440);
+
+    const QStringList questions = BankService::securityQuestions();
+    auto* intro = new QLabel("Enter your username and answer the 3 security questions you set when creating "
+                             "your account to reset your password.");
+    intro->setWordWrap(true);
+    intro->setObjectName("subtle");
+
+    auto* userEdit = new QLineEdit(usernameOut);
+    userEdit->setPlaceholderText("Your username");
+    userEdit->setMaxLength(20);
+    auto* q1Edit = new QLineEdit;
+    auto* q2Edit = new QLineEdit;
+    auto* q3Edit = new QLineEdit;
+    q1Edit->setPlaceholderText("Answer 1 (case-insensitive)");
+    q2Edit->setPlaceholderText("Answer 2 (case-insensitive)");
+    q3Edit->setPlaceholderText("Answer 3 (case-insensitive)");
+    for(auto* e : {q1Edit, q2Edit, q3Edit})
+        e->setMaxLength(50);
+
+    auto* newPassEdit = new QLineEdit;
+    newPassEdit->setEchoMode(QLineEdit::Password);
+    newPassEdit->setMaxLength(64);
+    newPassEdit->setPlaceholderText("At least 6 characters");
+    auto* confirmPassEdit = new QLineEdit;
+    confirmPassEdit->setEchoMode(QLineEdit::Password);
+    confirmPassEdit->setMaxLength(64);
+    auto* error = errorLabel();
+
+    auto* layout = new QVBoxLayout(&d);
+    layout->addWidget(intro);
+    layout->addWidget(new QLabel("<b>Username</b>"));
+    layout->addWidget(userEdit);
+    layout->addSpacing(4);
+    layout->addWidget(new QLabel("<b>Security Questions</b>"));
+    layout->addWidget(new QLabel(questions[0]));
+    layout->addWidget(q1Edit);
+    layout->addWidget(new QLabel(questions[1]));
+    layout->addWidget(q2Edit);
+    layout->addWidget(new QLabel(questions[2]));
+    layout->addWidget(q3Edit);
+    layout->addSpacing(4);
+
+    auto* form = new QFormLayout;
+    form->addRow("New password", newPassEdit);
+    form->addRow("Confirm password", confirmPassEdit);
+    layout->addLayout(form);
+    layout->addWidget(error);
+
+    auto* box = okCancel(d, "Reset password");
+    layout->addWidget(box);
+
+    QObject::connect(box, &QDialogButtonBox::accepted, &d, [&]() {
+        if(userEdit->text().trimmed().isEmpty())
+            error->setText("Please enter your username.");
+        else if(q1Edit->text().simplified().isEmpty() || q2Edit->text().simplified().isEmpty() ||
+                q3Edit->text().simplified().isEmpty())
+            error->setText("Please answer all 3 security questions.");
+        else if(newPassEdit->text().size() < 6 || newPassEdit->text().size() > 64 ||
+                newPassEdit->text().contains(' ') || newPassEdit->text().contains('|'))
+            error->setText("New password must be 6-64 characters with no spaces or '|'.");
+        else if(newPassEdit->text() != confirmPassEdit->text())
+            error->setText("New passwords do not match.");
+        else
+        {
+            bank.reload();
+            Result r = bank.resetPasswordWithSecurity(userEdit->text().trimmed(),
+                                                      q1Edit->text(), q2Edit->text(), q3Edit->text(),
+                                                      newPassEdit->text());
+            if(!r.ok)
+                error->setText(r.message);
+            else
+            {
+                usernameOut = userEdit->text().trimmed();
+                QMessageBox::information(&d, "Password reset", r.message);
+                d.accept();
+            }
+        }
+    });
+    return d.exec() == QDialog::Accepted;
+}
+
+// ============================================================================
 // DIALOG 6: Customer Self-Registration ("Create a bank account" from Login screen)
+//           Includes the 3 Security Questions for future password recovery.
 // ============================================================================
 bool askRegistration(QWidget* parent, QString& name, QString& phone, QString& type,
-                     QString& username, QString& password)
+                     QString& username, QString& password,
+                     QString& ans1, QString& ans2, QString& ans3)
 {
     QDialog d(parent);
     d.setWindowTitle("Create a bank account");
-    d.setMinimumWidth(420);
-    auto* intro = new QLabel("Fill in your details. Your account will be reviewed and must be "
+    d.setMinimumWidth(440);
+    auto* intro = new QLabel("Fill in your details and 3 security questions. Your account must be "
                              "activated by a bank administrator before you can sign in.");
     intro->setWordWrap(true);
     intro->setObjectName("subtle");
@@ -553,6 +695,18 @@ bool askRegistration(QWidget* parent, QString& name, QString& phone, QString& ty
     passEdit->setPlaceholderText("At least 6 characters");
     auto* confirmEdit = new QLineEdit;
     confirmEdit->setEchoMode(QLineEdit::Password);
+
+    // [3 SECURITY QUESTIONS INPUTS] Used if the customer forgets their password later:
+    const QStringList questions = BankService::securityQuestions();
+    auto* q1Edit = new QLineEdit;
+    auto* q2Edit = new QLineEdit;
+    auto* q3Edit = new QLineEdit;
+    q1Edit->setPlaceholderText("e.g. Dhaka");
+    q2Edit->setPlaceholderText("e.g. Ideal School");
+    q3Edit->setPlaceholderText("e.g. Coding");
+    for(auto* e : {q1Edit, q2Edit, q3Edit})
+        e->setMaxLength(50);
+
     auto* error = errorLabel();
 
     auto* form = new QFormLayout;
@@ -562,10 +716,19 @@ bool askRegistration(QWidget* parent, QString& name, QString& phone, QString& ty
     form->addRow("Username", userEdit);
     form->addRow("Password", passEdit);
     form->addRow("Confirm password", confirmEdit);
+
     auto* box = okCancel(d, "Create account");
     auto* layout = new QVBoxLayout(&d);
     layout->addWidget(intro);
     layout->addLayout(form);
+    layout->addSpacing(4);
+    layout->addWidget(new QLabel("<b>Security Questions (for password recovery)</b>"));
+    layout->addWidget(new QLabel(questions[0]));
+    layout->addWidget(q1Edit);
+    layout->addWidget(new QLabel(questions[1]));
+    layout->addWidget(q2Edit);
+    layout->addWidget(new QLabel(questions[2]));
+    layout->addWidget(q3Edit);
     layout->addWidget(error);
     layout->addWidget(box);
 
@@ -583,6 +746,11 @@ bool askRegistration(QWidget* parent, QString& name, QString& phone, QString& ty
             error->setText("Password must be 6-64 characters with no spaces or '|'.");
         else if(passEdit->text() != confirmEdit->text())
             error->setText("Passwords do not match.");
+        else if(q1Edit->text().simplified().isEmpty() || q2Edit->text().simplified().isEmpty() ||
+                q3Edit->text().simplified().isEmpty())
+            error->setText("Please answer all 3 security questions.");
+        else if(q1Edit->text().contains('|') || q2Edit->text().contains('|') || q3Edit->text().contains('|'))
+            error->setText("Security answers cannot contain '|'.");
         else
             d.accept();
     });
@@ -593,5 +761,8 @@ bool askRegistration(QWidget* parent, QString& name, QString& phone, QString& ty
     type = typeBox->currentText();
     username = userEdit->text();
     password = passEdit->text();
+    ans1 = q1Edit->text().simplified();
+    ans2 = q2Edit->text().simplified();
+    ans3 = q3Edit->text().simplified();
     return true;
 }

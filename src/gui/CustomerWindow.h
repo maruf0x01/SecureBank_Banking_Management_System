@@ -57,7 +57,7 @@ private:
     void doRepayLoan();
 
     // --- Page 4: Profile & security widgets ---
-    QLabel *profileName, *profileAccount, *profileType, *profilePhone, *profileStatus;
+    QLabel *profileName, *profileAccount, *profileType, *profilePhone, *profileStatus, *profileSecurity;
 
     // UI page builders
     QWidget* buildSidebar();
@@ -72,4 +72,5 @@ private:
     void doTransfer();
     void doChangePhone();
     void doChangePassword();
+    void doUpdateSecurityQuestions();
 };

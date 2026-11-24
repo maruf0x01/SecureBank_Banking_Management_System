@@ -3,7 +3,7 @@
 // PURPOSE: Declarations for reusable UI helpers (buttons, tables, money format)
 //          and all pop-up form dialogs (New/Edit Account, Deposit/Withdraw
 //          amount, Transfer Money, Loan Application/Repayment, Set Login,
-//          Change Password, Registration).
+//          Change Password, Security Questions, Forgot Password, Registration).
 // ============================================================================
 #pragma once
 
@@ -56,6 +56,13 @@ bool askCredentials(QWidget* parent, const QString& title, const QString& info, 
 // Pop-up dialog for a customer to change their password
 bool askChangePassword(QWidget* parent, QString& oldPassword, QString& newPassword);
 
-// Pop-up dialog for a new customer to self-register a bank account from the login screen
+// Pop-up dialog for a customer to set/update their 3 security question answers
+bool askSecurityQuestions(QWidget* parent, QString& ans1, QString& ans2, QString& ans3);
+
+// Pop-up dialog on the login screen to reset a forgotten password using the 3 security questions
+bool askForgotPassword(QWidget* parent, BankService& bank, QString& usernameOut);
+
+// Pop-up dialog for a new customer to self-register a bank account (includes 3 security questions)
 bool askRegistration(QWidget* parent, QString& name, QString& phone, QString& type,
-                     QString& username, QString& password);
+                     QString& username, QString& password,
+                     QString& ans1, QString& ans2, QString& ans3);

@@ -1,7 +1,8 @@
 // ============================================================================
 // FILE: BankService.cpp
 // PURPOSE: Implements all business rules, input validations, password hashing,
-//          deposit request workflow, loan workflow, and file persistence.
+//          3 security questions & forgot-password reset, deposit request
+//          workflow, loan workflow, and file persistence.
 // ============================================================================
 #include "BankService.h"
 
@@ -131,9 +132,10 @@ Result BankService::createAccount(const QString& name, const QString& phone, con
     return {true, QString("Account %1 created for %2.").arg(next).arg(n), next};
 }
 
-// Self-registers a new Pending account + login (used by Customer from the login window).
+// Self-registers a new Pending account + login + 3 security answers (used by Customer from login window).
 Result BankService::registerAccount(const QString& name, const QString& phone, const QString& type,
-                                    const QString& username, const QString& password)
+                                    const QString& username, const QString& password,
+                                    const QString& ans1, const QString& ans2, const QString& ans3)
 {
     static const QRegularExpression userRe("^[A-Za-z0-9_.]{3,20}$");
     QString n = name.trimmed();
@@ -159,7 +161,7 @@ Result BankService::registerAccount(const QString& name, const QString& phone, c
         accountList.pop_back();
         return {false, "Unable to save account data."};
     }
-    Result login = setCustomerLogin(next, username, password);
+    Result login = setCustomerLogin(next, username, password, ans1, ans2, ans3);
     if(!login.ok)
     {
         accountList.pop_back();
@@ -348,7 +350,17 @@ std::vector<Transaction> BankService::history(int accountNumber) const
     return out;
 }
 
-// ---------- Customer Logins (salted SHA-256 hashes in data/customers.txt) ----------
+// ---------- Customer Logins & 3 Security Questions (data/customers.txt) ----------
+
+// [SECURITY QUESTIONS] Change the 3 security question texts here:
+QStringList BankService::securityQuestions()
+{
+    return {
+        "1. What is your birth city or favorite city?",
+        "2. What was the name of your first school?",
+        "3. What is your favorite food or hobby?"
+    };
+}
 
 QString BankService::makeSalt()
 {
@@ -361,6 +373,12 @@ QString BankService::makeSalt()
 QString BankService::hashPassword(const QString& salt, const QString& password)
 {
     return QCryptographicHash::hash((salt + password).toUtf8(), QCryptographicHash::Sha256).toHex();
+}
+
+// Normalizes a security question answer (trims spaces and converts to lowercase) before hashing.
+QString BankService::normalizeAnswer(const QString& answer)
+{
+    return answer.simplified().toLower();
 }
 
 // [PASSWORD VALIDATION] 6 to 64 characters, no spaces or '|':
@@ -386,11 +404,15 @@ void BankService::loadCredentials()
     {
         QStringList p = in.readLine().split('|');
         bool ok = false;
-        if(p.size() != 4)
+        if(p.size() != 4 && p.size() != 7)
             continue;
         int number = p[0].toInt(&ok);
-        if(ok && number > 0)
-            credentials.push_back({number, p[1], p[2], p[3]});
+        if(!ok || number <= 0)
+            continue;
+        if(p.size() == 7)
+            credentials.push_back({number, p[1], p[2], p[3], p[4], p[5], p[6]});
+        else
+            credentials.push_back({number, p[1], p[2], p[3], QString(), QString(), QString()});
     }
 }
 
@@ -401,7 +423,8 @@ bool BankService::saveCredentials() const
         return false;
     QTextStream out(&file);
     for(const Credential& c : credentials)
-        out << c.accountNumber << '|' << c.username << '|' << c.salt << '|' << c.hash << '\n';
+        out << c.accountNumber << '|' << c.username << '|' << c.salt << '|' << c.hash << '|'
+            << c.ans1Hash << '|' << c.ans2Hash << '|' << c.ans3Hash << '\n';
     out.flush();
     return file.commit();
 }
@@ -409,6 +432,14 @@ bool BankService::saveCredentials() const
 bool BankService::hasLogin(int accountNumber) const
 {
     return !loginName(accountNumber).isEmpty();
+}
+
+bool BankService::hasSecurityAnswers(int accountNumber) const
+{
+    for(const Credential& c : credentials)
+        if(c.accountNumber == accountNumber)
+            return !c.ans1Hash.isEmpty() && !c.ans2Hash.isEmpty() && !c.ans3Hash.isEmpty();
+    return false;
 }
 
 QString BankService::loginName(int accountNumber) const
@@ -419,7 +450,8 @@ QString BankService::loginName(int accountNumber) const
     return QString();
 }
 
-Result BankService::setCustomerLogin(int accountNumber, const QString& username, const QString& password)
+Result BankService::setCustomerLogin(int accountNumber, const QString& username, const QString& password,
+                                     const QString& ans1, const QString& ans2, const QString& ans3)
 {
     static const QRegularExpression userRe("^[A-Za-z0-9_.]{3,20}$");
     if(!find(accountNumber))
@@ -432,11 +464,22 @@ Result BankService::setCustomerLogin(int accountNumber, const QString& username,
         if(c.accountNumber != accountNumber && c.username.compare(username, Qt::CaseInsensitive) == 0)
             return {false, "That username is already taken."};
 
+    QString n1 = normalizeAnswer(ans1), n2 = normalizeAnswer(ans2), n3 = normalizeAnswer(ans3);
+    bool hasNewAnswers = !n1.isEmpty() || !n2.isEmpty() || !n3.isEmpty();
+    if(hasNewAnswers && (n1.isEmpty() || n2.isEmpty() || n3.isEmpty()))
+        return {false, "Please provide answers for all 3 security questions."};
+
     std::vector<Credential> backup = credentials;
-    QString salt = makeSalt();
-    Credential cred{accountNumber, username, salt, hashPassword(salt, password)};
     auto it = std::find_if(credentials.begin(), credentials.end(),
                            [&](const Credential& c) { return c.accountNumber == accountNumber; });
+
+    // Reuse existing salt if keeping existing security question hashes; otherwise generate a new salt.
+    QString salt = (it != credentials.end() && !hasNewAnswers) ? it->salt : makeSalt();
+    QString h1 = hasNewAnswers ? hashPassword(salt, n1) : (it != credentials.end() ? it->ans1Hash : QString());
+    QString h2 = hasNewAnswers ? hashPassword(salt, n2) : (it != credentials.end() ? it->ans2Hash : QString());
+    QString h3 = hasNewAnswers ? hashPassword(salt, n3) : (it != credentials.end() ? it->ans3Hash : QString());
+
+    Credential cred{accountNumber, username, salt, hashPassword(salt, password), h1, h2, h3};
     if(it != credentials.end())
         *it = cred;
     else
@@ -447,6 +490,68 @@ Result BankService::setCustomerLogin(int accountNumber, const QString& username,
         return {false, "Unable to save customer login."};
     }
     return {true, QString("Customer login saved for account %1 (username: %2).").arg(accountNumber).arg(username)};
+}
+
+// Updates the 3 security question answers for an existing customer login.
+Result BankService::setSecurityAnswers(int accountNumber, const QString& ans1, const QString& ans2, const QString& ans3)
+{
+    QString n1 = normalizeAnswer(ans1), n2 = normalizeAnswer(ans2), n3 = normalizeAnswer(ans3);
+    if(n1.isEmpty() || n2.isEmpty() || n3.isEmpty())
+        return {false, "Please answer all 3 security questions."};
+    for(Credential& c : credentials)
+        if(c.accountNumber == accountNumber)
+        {
+            Credential backup = c;
+            c.ans1Hash = hashPassword(c.salt, n1);
+            c.ans2Hash = hashPassword(c.salt, n2);
+            c.ans3Hash = hashPassword(c.salt, n3);
+            if(!saveCredentials())
+            {
+                c = backup;
+                return {false, "Unable to save security answers."};
+            }
+            return {true, "Security question answers updated."};
+        }
+    return {false, "No login found for this account."};
+}
+
+// Resets a customer's forgotten password after verifying all 3 security question answers.
+Result BankService::resetPasswordWithSecurity(const QString& username, const QString& ans1, const QString& ans2,
+                                              const QString& ans3, const QString& newPassword)
+{
+    QString user = username.trimmed();
+    if(user.isEmpty())
+        return {false, "Please enter your username."};
+    QString n1 = normalizeAnswer(ans1), n2 = normalizeAnswer(ans2), n3 = normalizeAnswer(ans3);
+    if(n1.isEmpty() || n2.isEmpty() || n3.isEmpty())
+        return {false, "Please answer all 3 security questions."};
+    if(QString e = validatePassword(newPassword); !e.isEmpty())
+        return {false, e};
+
+    for(Credential& c : credentials)
+        if(c.username.compare(user, Qt::CaseInsensitive) == 0)
+        {
+            if(c.ans1Hash.isEmpty() || c.ans2Hash.isEmpty() || c.ans3Hash.isEmpty())
+                return {false, "Security questions are not set for this account. Please contact an administrator."};
+            if(hashPassword(c.salt, n1) != c.ans1Hash ||
+               hashPassword(c.salt, n2) != c.ans2Hash ||
+               hashPassword(c.salt, n3) != c.ans3Hash)
+                return {false, "One or more security question answers are incorrect."};
+
+            Credential backup = c;
+            c.salt = makeSalt();
+            c.hash = hashPassword(c.salt, newPassword);
+            c.ans1Hash = hashPassword(c.salt, n1);
+            c.ans2Hash = hashPassword(c.salt, n2);
+            c.ans3Hash = hashPassword(c.salt, n3);
+            if(!saveCredentials())
+            {
+                c = backup;
+                return {false, "Unable to save the new password."};
+            }
+            return {true, "Password reset successful! You can now sign in with your new password."};
+        }
+    return {false, "No customer account found with that username."};
 }
 
 Result BankService::removeCustomerLogin(int accountNumber)
@@ -500,7 +605,7 @@ Result BankService::changePassword(int accountNumber, const QString& oldPassword
             if(QString e = validatePassword(newPassword); !e.isEmpty())
                 return {false, e};
             Credential backup = c;
-            c.salt = makeSalt();
+            // Keep c.salt so existing security question answer hashes remain valid.
             c.hash = hashPassword(c.salt, newPassword);
             if(!saveCredentials())
             {

@@ -1,7 +1,8 @@
 // ============================================================================
 // FILE: LoginDialog.h
 // PURPOSE: Header for the Sign-In window (supports Customer and Admin roles,
-//          plus a link for new customers to self-register an account).
+//          "Forgot password?" recovery via 3 security questions, and a link
+//          for new customers to self-register an account).
 // ============================================================================
 #pragma once
 
@@ -29,12 +30,14 @@ public:
 private slots:
     void attemptLogin();       // Triggered when clicking "Sign in" or pressing Enter
     void openRegistration();   // Triggered when clicking "New customer? Create a bank account"
+    void openForgotPassword(); // Triggered when clicking "Forgot password?"
     void setRole(Role role);   // Switches between Customer tab and Admin tab
 
 private:
     BankService& bank;
     QPushButton* customerTab;    // "Customer" role switch button
     QPushButton* adminTab;       // "Admin" role switch button
+    QPushButton* forgotButton;   // "Forgot password?" link button
     QPushButton* registerButton; // "New customer? Create a bank account" link button
     QLineEdit* usernameEdit;     // Username input field
     QLineEdit* passwordEdit;     // Password input field

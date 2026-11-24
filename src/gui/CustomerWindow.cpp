@@ -2,11 +2,11 @@
 // FILE: CustomerWindow.cpp
 // PURPOSE: Implements the Customer online banking dashboard:
 //          - Left Sidebar ("Overview", "Transactions", "Deposit requests", "Loans", "Profile & security")
-//          - Overview page (Welcome title, blue Balance Hero Card, Send money / Deposit / Withdraw / Take loan buttons)
+//          - Overview page (Welcome title, blue Balance Hero Card, Send money / Deposit / Withdraw / Apply for loan)
 //          - Transactions page (Customer's transaction history + type filter)
 //          - Deposit requests page ("Request a deposit" button + request status table)
 //          - Loans page ("Apply for a loan" & "Repay selected loan" buttons + loans status table)
-//          - Profile & security page (Account info card + Change phone / Change password buttons)
+//          - Profile & security page (Account info card + Change phone / Change password / Security questions)
 // ============================================================================
 #include "CustomerWindow.h"
 
@@ -238,7 +238,7 @@ QWidget* CustomerWindow::buildLoans()
 }
 
 // ============================================================================
-// PAGE 4: PROFILE & SECURITY (Account details card + Change phone / password buttons)
+// PAGE 4: PROFILE & SECURITY (Account details card + Phone / Password / Security questions)
 // ============================================================================
 QWidget* CustomerWindow::buildProfile()
 {
@@ -247,7 +247,7 @@ QWidget* CustomerWindow::buildProfile()
     v->setContentsMargins(24, 20, 24, 20);
     makeTitle("Profile & security", "Your account details and sign-in settings.", v);
 
-    // [PROFILE CARD] Displays Name, Account number, Account type, Phone, and Status:
+    // [PROFILE CARD] Displays Name, Account number, Account type, Phone, Status, and Security questions:
     auto* card = makeCard();
     auto* form = new QFormLayout(card);
     form->setContentsMargins(20, 16, 20, 16);
@@ -257,21 +257,26 @@ QWidget* CustomerWindow::buildProfile()
     profileType = new QLabel;
     profilePhone = new QLabel;
     profileStatus = new QLabel;
+    profileSecurity = new QLabel;
     form->addRow("Name", profileName);
     form->addRow("Account number", profileAccount);
     form->addRow("Account type", profileType);
     form->addRow("Phone", profilePhone);
     form->addRow("Status", profileStatus);
+    form->addRow("Security questions", profileSecurity);
     v->addWidget(card);
 
-    // [PROFILE BUTTONS] "Change phone number" and "Change password":
+    // [PROFILE BUTTONS] "Change phone number", "Change password", and "Update security questions":
     auto* phone = makeButton("Change phone number");
     auto* pass = makeButton("Change password");
+    auto* secBtn = makeButton("Update security questions");
     connect(phone, &QPushButton::clicked, this, [this] { doChangePhone(); });
     connect(pass, &QPushButton::clicked, this, [this] { doChangePassword(); });
+    connect(secBtn, &QPushButton::clicked, this, [this] { doUpdateSecurityQuestions(); });
     auto* row = new QHBoxLayout;
     row->addWidget(phone);
     row->addWidget(pass);
+    row->addWidget(secBtn);
     row->addStretch();
     v->addLayout(row);
     v->addStretch();
@@ -305,6 +310,7 @@ void CustomerWindow::refresh()
     profileType->setText(QString::fromStdString(a->getAccountType()));
     profilePhone->setText(QString::fromStdString(a->getPhoneNumber()));
     profileStatus->setText(QString::fromStdString(a->getStatus()));
+    profileSecurity->setText(bank.hasSecurityAnswers(accountNumber) ? "Configured (3 questions set)" : "Not set");
 
     auto all = bank.history(accountNumber);
     auto recent = all;
@@ -513,4 +519,12 @@ void CustomerWindow::doChangePassword()
     QString oldPass, newPass;
     if(askChangePassword(this, oldPass, newPass))
         report(bank.changePassword(accountNumber, oldPass, newPass));
+}
+
+// Triggered by "Update security questions" button:
+void CustomerWindow::doUpdateSecurityQuestions()
+{
+    QString ans1, ans2, ans3;
+    if(askSecurityQuestions(this, ans1, ans2, ans3))
+        report(bank.setSecurityAnswers(accountNumber, ans1, ans2, ans3));
 }

@@ -7,6 +7,7 @@
 #pragma once
 
 #include <QString>
+#include <QStringList>
 #include <vector>
 
 #include "Account.h"
@@ -57,9 +58,11 @@ public:
 
     // Account management operations
     Result createAccount(const QString& name, const QString& phone, const QString& type);
-    // Self-service registration: creates a Pending account plus its login. An admin must activate it.
+    // Self-service registration: creates a Pending account plus its login and 3 security question answers.
     Result registerAccount(const QString& name, const QString& phone, const QString& type,
-                           const QString& username, const QString& password);
+                           const QString& username, const QString& password,
+                           const QString& ans1 = QString(), const QString& ans2 = QString(),
+                           const QString& ans3 = QString());
     Result updateAccount(int number, const QString& name, const QString& phone, const QString& type);
     // Permanently deletes an account (balance and unpaid loan must be zero), its login, deposits, and loans.
     // Transaction history is kept for auditing.
@@ -97,10 +100,17 @@ public:
     int pendingLoanCount() const;
     long long activeLoanDebt(int accountNumber = 0) const; // 0 = total across bank, >0 = specific account
 
-    // Customer login management & authentication
+    // Customer login management, security questions & authentication
+    static QStringList securityQuestions(); // Returns the 3 standard security questions
     bool hasLogin(int accountNumber) const;
+    bool hasSecurityAnswers(int accountNumber) const;
     QString loginName(int accountNumber) const;
-    Result setCustomerLogin(int accountNumber, const QString& username, const QString& password);
+    Result setCustomerLogin(int accountNumber, const QString& username, const QString& password,
+                            const QString& ans1 = QString(), const QString& ans2 = QString(),
+                            const QString& ans3 = QString());
+    Result setSecurityAnswers(int accountNumber, const QString& ans1, const QString& ans2, const QString& ans3);
+    Result resetPasswordWithSecurity(const QString& username, const QString& ans1, const QString& ans2,
+                                     const QString& ans3, const QString& newPassword);
     Result removeCustomerLogin(int accountNumber);
     int authenticate(const QString& username, const QString& password) const; // account no.; -1 bad login, -2 closed, -3 pending
     bool verifyPassword(int accountNumber, const QString& password) const;
@@ -114,6 +124,7 @@ private:
     {
         int accountNumber;
         QString username, salt, hash;
+        QString ans1Hash, ans2Hash, ans3Hash; // Salted SHA-256 hashes of the 3 security question answers
     };
 
     std::vector<Account> accountList;
@@ -140,6 +151,7 @@ private:
     void loadCredentials();
     bool saveCredentials() const;
     static QString hashPassword(const QString& salt, const QString& password);
+    static QString normalizeAnswer(const QString& answer);
     static QString makeSalt();
     static QString validatePassword(const QString& password);
 };

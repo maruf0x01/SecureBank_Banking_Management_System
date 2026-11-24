@@ -1,8 +1,8 @@
 // ============================================================================
 // FILE: CustomerWindow.h
 // PURPOSE: Header for the Customer main window.
-//          Contains 4 pages switched via the left sidebar:
-//          0 = Overview, 1 = Transactions, 2 = Deposit requests, 3 = Profile & security.
+//          Contains 5 pages switched via the left sidebar:
+//          0 = Overview, 1 = Transactions, 2 = Deposit requests, 3 = Loans, 4 = Profile & security.
 // ============================================================================
 #pragma once
 
@@ -15,6 +15,7 @@ class QTableWidget;
 class QStackedWidget;
 class QListWidget;
 class QComboBox;
+class QPushButton;
 
 class CustomerWindow : public QMainWindow
 {
@@ -46,7 +47,16 @@ private:
     QWidget* buildRequests();
     void doRequestDeposit();
 
-    // --- Page 3: Profile & security widgets ---
+    // --- Page 3: Loans widgets ---
+    QTableWidget* loanTable;
+    QPushButton* repayLoanBtn;
+    QLabel* loanSummaryLabel;
+    QWidget* buildLoans();
+    int selectedLoanId() const;
+    void doRequestLoan();
+    void doRepayLoan();
+
+    // --- Page 4: Profile & security widgets ---
     QLabel *profileName, *profileAccount, *profileType, *profilePhone, *profileStatus;
 
     // UI page builders

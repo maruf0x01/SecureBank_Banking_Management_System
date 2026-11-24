@@ -1,10 +1,11 @@
 // ============================================================================
 // FILE: CustomerWindow.cpp
 // PURPOSE: Implements the Customer online banking dashboard:
-//          - Left Sidebar ("Overview", "Transactions", "Deposit requests", "Profile & security")
-//          - Overview page (Welcome title, blue Balance Hero Card, Send money / Deposit / Withdraw buttons)
+//          - Left Sidebar ("Overview", "Transactions", "Deposit requests", "Loans", "Profile & security")
+//          - Overview page (Welcome title, blue Balance Hero Card, Send money / Deposit / Withdraw / Take loan buttons)
 //          - Transactions page (Customer's transaction history + type filter)
 //          - Deposit requests page ("Request a deposit" button + request status table)
+//          - Loans page ("Apply for a loan" & "Repay selected loan" buttons + loans status table)
 //          - Profile & security page (Account info card + Change phone / Change password buttons)
 // ============================================================================
 #include "CustomerWindow.h"
@@ -41,7 +42,8 @@ CustomerWindow::CustomerWindow(BankService& bank, int accountNumber)
     pages->addWidget(buildOverview()); // Page index 0
     pages->addWidget(buildHistory());  // Page index 1
     pages->addWidget(buildRequests()); // Page index 2
-    pages->addWidget(buildProfile());  // Page index 3
+    pages->addWidget(buildLoans());    // Page index 3
+    pages->addWidget(buildProfile());  // Page index 4
     layout->addWidget(pages, 1);
     setCentralWidget(central);
 
@@ -75,7 +77,7 @@ QWidget* CustomerWindow::buildSidebar()
     // [SIDEBAR MENU ITEMS] Change customer sidebar menu names here:
     sidebar = new QListWidget;
     sidebar->setObjectName("sidebar");
-    sidebar->addItems({"Overview", "Transactions", "Deposit requests", "Profile & security"});
+    sidebar->addItems({"Overview", "Transactions", "Deposit requests", "Loans", "Profile & security"});
     sidebar->setFocusPolicy(Qt::NoFocus);
     for(int i = 0; i < sidebar->count(); i++)
         sidebar->item(i)->setSizeHint(QSize(0, 44));
@@ -124,7 +126,7 @@ QWidget* CustomerWindow::buildOverview()
     hv->addWidget(accountLabel);
     v->addWidget(hero);
 
-    // [QUICK ACTION BUTTONS] "Send money", "Deposit", and "Withdraw" below the balance card:
+    // [QUICK ACTION BUTTONS] "Send money", "Deposit", "Withdraw", and "Apply for loan":
     statusLabel = new QLabel;
     statusLabel->setObjectName("subtle");
     auto* deposit = makeButton("Deposit", false);     // Change false -> true to make it blue
@@ -132,16 +134,20 @@ QWidget* CustomerWindow::buildOverview()
     connect(deposit, &QPushButton::clicked, this, [this] { doRequestDeposit(); });
     auto* withdraw = makeButton("Withdraw", false);
     auto* transfer = makeButton("Send money", true);  // true = Blue primary button
+    auto* loanBtn = makeButton("Apply for loan", false);
     withdraw->setMinimumHeight(38);
     transfer->setMinimumHeight(38);
+    loanBtn->setMinimumHeight(38);
     connect(withdraw, &QPushButton::clicked, this, [this] { doWithdraw(); });
     connect(transfer, &QPushButton::clicked, this, [this] { doTransfer(); });
+    connect(loanBtn, &QPushButton::clicked, this, [this] { doRequestLoan(); });
 
     // [BUTTON ORDER] Change the order of row->addWidget(...) to move buttons left/right:
     auto* row = new QHBoxLayout;
     row->addWidget(transfer);
     row->addWidget(deposit);
     row->addWidget(withdraw);
+    row->addWidget(loanBtn);
     row->addStretch();
     row->addWidget(statusLabel);
     v->addLayout(row);
@@ -164,7 +170,7 @@ QWidget* CustomerWindow::buildHistory()
     v->setContentsMargins(24, 20, 24, 20);
     makeTitle("Transactions", "Your complete transaction history.", v);
     historyType = new QComboBox;
-    historyType->addItems({"All types", "Deposit", "Withdrawal", "Transfer Sent", "Transfer Received"});
+    historyType->addItems({"All types", "Deposit", "Withdrawal", "Transfer Sent", "Transfer Received", "Loan Disbursed", "Loan Repayment"});
     auto* row = new QHBoxLayout;
     row->addWidget(historyType);
     row->addStretch();
@@ -196,7 +202,43 @@ QWidget* CustomerWindow::buildRequests()
 }
 
 // ============================================================================
-// PAGE 3: PROFILE & SECURITY (Account details card + Change phone / password buttons)
+// PAGE 3: LOANS ("Apply for a loan" & "Repay selected loan" buttons + loans table)
+// ============================================================================
+QWidget* CustomerWindow::buildLoans()
+{
+    auto* page = new QWidget;
+    auto* v = new QVBoxLayout(page);
+    v->setContentsMargins(24, 20, 24, 20);
+    makeTitle("Loans", "Apply for a loan or repay an active loan from your account balance.", v);
+
+    auto* applyBtn = makeButton("Apply for a loan", true);
+    repayLoanBtn = makeButton("Repay selected loan", false);
+    repayLoanBtn->setEnabled(false);
+    loanSummaryLabel = new QLabel;
+    loanSummaryLabel->setObjectName("subtle");
+
+    connect(applyBtn, &QPushButton::clicked, this, [this] { doRequestLoan(); });
+    connect(repayLoanBtn, &QPushButton::clicked, this, [this] { doRepayLoan(); });
+
+    auto* row = new QHBoxLayout;
+    row->addWidget(applyBtn);
+    row->addWidget(repayLoanBtn);
+    row->addStretch();
+    row->addWidget(loanSummaryLabel);
+    v->addLayout(row);
+
+    loanTable = makeTable({"Loan ID", "Requested", "Purpose", "Loan Amount", "Remaining Due", "Status", "Decided"});
+    v->addWidget(loanTable, 1);
+
+    connect(loanTable, &QTableWidget::itemSelectionChanged, this, [this] {
+        bool activeLoan = selectedLoanId() > 0 && loanTable->item(loanTable->currentRow(), 5)->text() == "Active";
+        repayLoanBtn->setEnabled(activeLoan);
+    });
+    return page;
+}
+
+// ============================================================================
+// PAGE 4: PROFILE & SECURITY (Account details card + Change phone / password buttons)
 // ============================================================================
 QWidget* CustomerWindow::buildProfile()
 {
@@ -246,11 +288,15 @@ void CustomerWindow::refresh()
     if(!a)
         return;
     QString name = QString::fromStdString(a->getCustomerName());
+    long long debt = bank.activeLoanDebt(accountNumber);
 
-    // [OVERVIEW TEXTS] Welcome heading, balance number, and account subtitle:
+    // [OVERVIEW TEXTS] Welcome heading, balance number, and account subtitle (with active loan info):
     welcomeLabel->setText("Welcome, " + name);
     balanceLabel->setText(money(a->getBalancePaisa()));
-    accountLabel->setText(QString("%1 account  -  No. %2").arg(QString::fromStdString(a->getAccountType())).arg(accountNumber));
+    QString subText = QString("%1 account  -  No. %2").arg(QString::fromStdString(a->getAccountType())).arg(accountNumber);
+    if(debt > 0)
+        subText += QString("   |   Active loan due: %1").arg(money(debt));
+    accountLabel->setText(subText);
     bool active = a->getStatus() == "Active";
     statusLabel->setText(active ? "" : "This account is closed. Transactions are disabled.");
 
@@ -274,17 +320,18 @@ void CustomerWindow::refresh()
     }
     fillHistory(historyTable, bank, all, false);
 
+    auto make = [](const QString& t, bool right = false) {
+        auto* i = new QTableWidgetItem(t);
+        if(right)
+            i->setTextAlignment(Qt::AlignRight | Qt::AlignVCenter);
+        return i;
+    };
+
     requestTable->setRowCount(0);
     for(const DepositRequest& d : bank.depositRequests(accountNumber))
     {
         int row = requestTable->rowCount();
         requestTable->insertRow(row);
-        auto make = [](const QString& t, bool right = false) {
-            auto* i = new QTableWidgetItem(t);
-            if(right)
-                i->setTextAlignment(Qt::AlignRight | Qt::AlignVCenter);
-            return i;
-        };
         requestTable->setItem(row, 0, make(QString::number(d.id)));
         requestTable->setItem(row, 1, make(d.requestedAt));
         requestTable->setItem(row, 2, make(money(d.amountPaisa), true));
@@ -294,6 +341,30 @@ void CustomerWindow::refresh()
         requestTable->setItem(row, 3, st);
         requestTable->setItem(row, 4, make(d.decidedAt.isEmpty() ? "-" : d.decidedAt));
     }
+
+    int keepLoan = selectedLoanId();
+    loanTable->setRowCount(0);
+    for(const LoanRequest& l : bank.loanRequests(accountNumber))
+    {
+        int row = loanTable->rowCount();
+        loanTable->insertRow(row);
+        loanTable->setItem(row, 0, make(QString::number(l.id)));
+        loanTable->setItem(row, 1, make(l.requestedAt));
+        loanTable->setItem(row, 2, make(l.purpose));
+        loanTable->setItem(row, 3, make(money(l.amountPaisa), true));
+        loanTable->setItem(row, 4, make(money(l.remainingPaisa), true));
+        auto* st = make(l.status);
+        st->setForeground((l.status == "Active" || l.status == "Paid") ? QColor("#15803d")
+                          : l.status == "Rejected" ? QColor("#b91c1c") : QColor("#b45309"));
+        loanTable->setItem(row, 5, st);
+        loanTable->setItem(row, 6, make(l.decidedAt.isEmpty() ? "-" : l.decidedAt));
+        if(l.id == keepLoan)
+            loanTable->selectRow(row);
+    }
+    loanSummaryLabel->setText(debt > 0 ? QString("Total active loan due: %1").arg(money(debt))
+                                       : "No active loan due");
+    bool activeLoan = selectedLoanId() > 0 && loanTable->item(loanTable->currentRow(), 5)->text() == "Active";
+    repayLoanBtn->setEnabled(activeLoan);
 }
 
 void CustomerWindow::report(const Result& r)
@@ -305,12 +376,67 @@ void CustomerWindow::report(const Result& r)
     refresh();
 }
 
+int CustomerWindow::selectedLoanId() const
+{
+    int row = loanTable->currentRow();
+    if(row < 0 || loanTable->selectedItems().isEmpty() || !loanTable->item(row, 0))
+        return -1;
+    return loanTable->item(row, 0)->text().toInt();
+}
+
 // Triggered by "Deposit" / "Request a deposit" button:
 void CustomerWindow::doRequestDeposit()
 {
     long long amount;
     if(askAmount(this, "Request deposit", "Enter the amount to deposit. It will be added to your balance after an administrator approves it.", amount))
         report(bank.requestDeposit(accountNumber, amount));
+}
+
+// Triggered by "Apply for loan" / "Apply for a loan" button:
+void CustomerWindow::doRequestLoan()
+{
+    long long amount;
+    QString purpose;
+    if(askLoanRequest(this, amount, purpose))
+    {
+        Result r = bank.requestLoan(accountNumber, amount, purpose);
+        report(r);
+        if(r.ok)
+            QMessageBox::information(this, "Loan application submitted", r.message);
+    }
+}
+
+// Triggered by "Repay selected loan" button on the Loans page:
+void CustomerWindow::doRepayLoan()
+{
+    int id = selectedLoanId();
+    if(id < 0)
+        return;
+    const Account* a = bank.find(accountNumber);
+    if(!a)
+        return;
+    long long remaining = 0;
+    for(const LoanRequest& l : bank.loanRequests(accountNumber))
+        if(l.id == id)
+        {
+            remaining = l.remainingPaisa;
+            break;
+        }
+    if(remaining <= 0)
+        return;
+    if(a->getBalancePaisa() <= 0)
+    {
+        QMessageBox::warning(this, "Repay loan", "Your account balance is 0.00. Deposit money before repaying the loan.");
+        return;
+    }
+    long long amount;
+    if(askLoanRepayment(this, id, remaining, a->getBalancePaisa(), amount))
+    {
+        Result r = bank.repayLoan(accountNumber, id, amount);
+        report(r);
+        if(r.ok)
+            QMessageBox::information(this, "Loan repayment", r.message);
+    }
 }
 
 // Triggered by "Withdraw" button (verifies customer password and shows confirmation pop-up):

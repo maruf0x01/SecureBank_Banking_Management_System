@@ -100,7 +100,7 @@ void fillHistory(QTableWidget* table, const BankService& bank, const std::vector
         table->setItem(row, c++, cell(QString::fromStdString(t.type)));
 
         // [TRANSACTION AMOUNT COLOR] Green "+ " for money in, Red "- " for money out:
-        bool incoming = t.type == "Deposit" || t.type == "Transfer Received";
+        bool incoming = t.type == "Deposit" || t.type == "Transfer Received" || t.type == "Loan Disbursed";
         auto* amount = cell((incoming ? "+ " : "- ") + money(t.amountPaisa), true);
         amount->setForeground(incoming ? QColor("#15803d") : QColor("#b91c1c"));
         table->setItem(row, c++, amount);
@@ -342,6 +342,92 @@ bool askTransfer(QWidget* parent, const BankService& bank, int fixedFrom, int pr
             paisa = amt;
             d.accept();
         }
+    });
+    return d.exec() == QDialog::Accepted;
+}
+
+// ============================================================================
+// DIALOG 3B: Apply for a Loan (Customer selects Purpose + enters Loan Amount)
+// ============================================================================
+bool askLoanRequest(QWidget* parent, long long& paisa, QString& purpose)
+{
+    QDialog d(parent);
+    d.setWindowTitle("Apply for a loan");
+    d.setMinimumWidth(380);
+
+    auto* info = new QLabel("Submit a loan application. Once approved by an administrator, "
+                            "the loan amount will be credited to your account balance.");
+    info->setWordWrap(true);
+    info->setObjectName("subtle");
+
+    // [LOAN PURPOSES DROPDOWN] Add or rename loan categories here:
+    auto* purposeBox = new QComboBox;
+    purposeBox->addItems({"Personal", "Education", "Business", "Medical", "Home"});
+
+    auto* amountEdit = new QLineEdit;
+    amountEdit->setPlaceholderText("0.00");
+    amountEdit->setValidator(new QRegularExpressionValidator(QRegularExpression("[0-9]{0,12}([.][0-9]{0,2})?"), &d));
+    auto* error = errorLabel();
+
+    auto* form = new QFormLayout;
+    form->addRow("Loan purpose", purposeBox);
+    form->addRow("Loan amount", amountEdit);
+    auto* box = okCancel(d, "Submit application");
+    auto* layout = new QVBoxLayout(&d);
+    layout->addWidget(info);
+    layout->addLayout(form);
+    layout->addWidget(error);
+    layout->addWidget(box);
+
+    QObject::connect(box, &QDialogButtonBox::accepted, &d, [&]() {
+        if(!BankService::parseAmount(amountEdit->text(), paisa))
+            error->setText("Enter a positive loan amount with up to two decimals.");
+        else
+            d.accept();
+    });
+    if(d.exec() != QDialog::Accepted)
+        return false;
+    purpose = purposeBox->currentText();
+    return true;
+}
+
+// ============================================================================
+// DIALOG 3C: Repay an Active Loan (Customer enters partial or full repayment amount)
+// ============================================================================
+bool askLoanRepayment(QWidget* parent, int loanId, long long remainingPaisa, long long balancePaisa,
+                      long long& paisa)
+{
+    QDialog d(parent);
+    d.setWindowTitle(QString("Repay loan #%1").arg(loanId));
+    d.setMinimumWidth(380);
+
+    auto* info = new QLabel(QString("Remaining loan due: <b>%1</b><br>Your available balance: <b>%2</b>")
+                                .arg(money(remainingPaisa))
+                                .arg(money(balancePaisa)));
+    info->setWordWrap(true);
+
+    auto* amountEdit = new QLineEdit(money(std::min(remainingPaisa, balancePaisa)));
+    amountEdit->setPlaceholderText("0.00");
+    amountEdit->setValidator(new QRegularExpressionValidator(QRegularExpression("[0-9]{0,12}([.][0-9]{0,2})?"), &d));
+    auto* error = errorLabel();
+
+    auto* box = okCancel(d, "Repay loan");
+    auto* layout = new QVBoxLayout(&d);
+    layout->addWidget(info);
+    layout->addWidget(new QLabel("Repayment amount"));
+    layout->addWidget(amountEdit);
+    layout->addWidget(error);
+    layout->addWidget(box);
+
+    QObject::connect(box, &QDialogButtonBox::accepted, &d, [&]() {
+        if(!BankService::parseAmount(amountEdit->text(), paisa))
+            error->setText("Enter a positive repayment amount with up to two decimals.");
+        else if(paisa > remainingPaisa)
+            error->setText("Amount exceeds the remaining loan balance of " + money(remainingPaisa) + ".");
+        else if(paisa > balancePaisa)
+            error->setText("Insufficient account balance. Available: " + money(balancePaisa) + ".");
+        else
+            d.accept();
     });
     return d.exec() == QDialog::Accepted;
 }

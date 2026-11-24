@@ -1,11 +1,12 @@
 // ============================================================================
 // FILE: AdminWindow.cpp
 // PURPOSE: Implements the Administrator dashboard and management screens:
-//          - Left Sidebar ("Dashboard", "Accounts", "Transactions", "Deposit requests")
-//          - Dashboard page (8 summary stat cards + recent transactions table)
+//          - Left Sidebar ("Dashboard", "Accounts", "Transactions", "Deposit requests", "Loans")
+//          - Dashboard page (8 summary stat cards + account types + recent transactions table)
 //          - Accounts page (search, filter, table, and 10 action buttons)
 //          - Transactions page (full history with account & type filters)
 //          - Deposit requests page ("Approve" and "Reject" customer deposits)
+//          - Loans page ("Approve loan" and "Reject loan" customer loan applications)
 // ============================================================================
 #include "AdminWindow.h"
 
@@ -56,13 +57,14 @@ AdminWindow::AdminWindow(BankService& bank)
     layout->setContentsMargins(0, 0, 0, 0);
     layout->setSpacing(0);
 
-    // Add left sidebar and the 4 main pages on the right:
+    // Add left sidebar and the 5 main pages on the right:
     pages = new QStackedWidget;
     layout->addWidget(buildSidebar());
     pages->addWidget(buildDashboard());     // Page index 0
     pages->addWidget(buildAccounts());      // Page index 1
     pages->addWidget(buildTransactions());  // Page index 2
     pages->addWidget(buildRequests());      // Page index 3
+    pages->addWidget(buildLoans());         // Page index 4
     layout->addWidget(pages, 1);
     setCentralWidget(central);
 
@@ -75,13 +77,19 @@ AdminWindow::AdminWindow(BankService& bank)
     sidebar->setCurrentRow(0);
     refreshAll();
 
-    // Auto-jump to Deposit requests or Pending Accounts on login if any are waiting for admin approval:
+    // Auto-jump to pending Loans, Deposit requests, or Pending Accounts on login if any are waiting:
     int pending = 0;
     for(const Account& a : bank.accounts())
         if(a.getStatus() == "Pending")
             pending++;
     int pendingDeposits = bank.pendingDepositCount();
-    if(pendingDeposits)
+    int pendingLoans = bank.pendingLoanCount();
+    if(pendingLoans)
+    {
+        sidebar->setCurrentRow(4);
+        statusBar()->showMessage(QString("%1 loan application(s) awaiting approval.").arg(pendingLoans), 10000);
+    }
+    else if(pendingDeposits)
     {
         sidebar->setCurrentRow(3);
         statusBar()->showMessage(QString("%1 deposit request(s) awaiting approval.").arg(pendingDeposits), 10000);
@@ -116,7 +124,7 @@ QWidget* AdminWindow::buildSidebar()
     // [SIDEBAR MENU ITEMS] Change sidebar page names here:
     sidebar = new QListWidget;
     sidebar->setObjectName("sidebar");
-    sidebar->addItems({"Dashboard", "Accounts", "Transactions", "Deposit requests"});
+    sidebar->addItems({"Dashboard", "Accounts", "Transactions", "Deposit requests", "Loans"});
     sidebar->setFocusPolicy(Qt::NoFocus);
     for(int i = 0; i < sidebar->count(); i++)
         sidebar->item(i)->setSizeHint(QSize(0, 44));
@@ -159,17 +167,19 @@ QWidget* AdminWindow::buildDashboard()
     grid->addWidget(makeStatCard("Total deposits", depositsValue), 1, 0);
     grid->addWidget(makeStatCard("Total withdrawals", withdrawalsValue), 1, 1);
     grid->addWidget(makeStatCard("Total transferred", transfersValue), 1, 2);
-    QLabel* dummy;
-    QFrame* typeCard = makeStatCard("Account types", dummy);
-    typeBreakdown = dummy;
-    typeBreakdown->setObjectName("subtle");
-    grid->addWidget(typeCard, 1, 3);
+    grid->addWidget(makeStatCard("Active loans due", loansValue), 1, 3);
     v->addLayout(grid);
 
-    // [RECENT TRANSACTIONS SECTION] Heading and table on the dashboard:
+    // [RECENT TRANSACTIONS SECTION] Heading, account type summary, and table on the dashboard:
+    auto* headerRow = new QHBoxLayout;
     auto* recentTitle = new QLabel("<b>Recent transactions</b>");
+    typeBreakdown = new QLabel;
+    typeBreakdown->setObjectName("subtle");
+    headerRow->addWidget(recentTitle);
+    headerRow->addStretch();
+    headerRow->addWidget(typeBreakdown);
     v->addSpacing(8);
-    v->addWidget(recentTitle);
+    v->addLayout(headerRow);
     recentTable = makeTable({"Account", "Date", "Type", "Amount", "Counterparty", "Transaction ID"});
     v->addWidget(recentTable, 1);
     return page;
@@ -200,7 +210,7 @@ QWidget* AdminWindow::buildAccounts()
     v->addLayout(filterRow);
 
     // [ACCOUNTS TABLE] Change column header names here:
-    accountTable = makeTable({"Account No.", "Customer", "Phone", "Type", "Balance", "Status", "Login"});
+    accountTable = makeTable({"Account No.", "Customer", "Phone", "Type", "Balance", "Active Loan", "Status", "Login"});
     accountTable->setContextMenuPolicy(Qt::CustomContextMenu);
     v->addWidget(accountTable, 1);
 
@@ -287,7 +297,7 @@ QWidget* AdminWindow::buildTransactions()
     historyAccount->setMaxLength(9);
     historyAccount->setValidator(new QRegularExpressionValidator(QRegularExpression("[0-9]*"), historyAccount));
     historyType = new QComboBox;
-    historyType->addItems({"All types", "Deposit", "Withdrawal", "Transfer Sent", "Transfer Received"});
+    historyType->addItems({"All types", "Deposit", "Withdrawal", "Transfer Sent", "Transfer Received", "Loan Disbursed", "Loan Repayment"});
     auto* row = new QHBoxLayout;
     row->addWidget(historyAccount, 1);
     row->addWidget(historyType);
@@ -310,21 +320,24 @@ int AdminWindow::selectedAccount() const
     return accountTable->item(row, 0)->text().toInt();
 }
 
-// Refreshes all 4 pages and updates the pending badge counters on the sidebar.
+// Refreshes all 5 pages and updates the pending badge counters on the sidebar.
 void AdminWindow::refreshAll()
 {
     refreshDashboard();
     refreshAccounts();
     refreshHistory();
     refreshRequests();
+    refreshLoans();
     int pending = 0;
     for(const Account& a : bank.accounts())
         if(a.getStatus() == "Pending")
             pending++;
-    // [SIDEBAR BADGE TEXT] Shows how many new accounts or deposit requests are waiting:
+    // [SIDEBAR BADGE TEXT] Shows how many new accounts, deposit requests, or loans are waiting:
     sidebar->item(1)->setText(pending ? QString("Accounts  (%1 new)").arg(pending) : "Accounts");
     int deposits = bank.pendingDepositCount();
     sidebar->item(3)->setText(deposits ? QString("Deposit requests  (%1)").arg(deposits) : "Deposit requests");
+    int pendingLoans = bank.pendingLoanCount();
+    sidebar->item(4)->setText(pendingLoans ? QString("Loans  (%1)").arg(pendingLoans) : "Loans");
 }
 
 // Calculates totals and updates the 8 stat cards + recent transactions on the Dashboard page.
@@ -361,11 +374,12 @@ void AdminWindow::refreshDashboard()
     depositsValue->setText(money(deposits));
     withdrawalsValue->setText(money(withdrawals));
     transfersValue->setText(money(transfers));
+    loansValue->setText(money(bank.activeLoanDebt(0)));
+
     QStringList parts;
     for(const auto& e : types)
         parts << QString("%1: %2").arg(QString::fromStdString(e.first)).arg(e.second);
-    typeBreakdown->setText(parts.isEmpty() ? "-" : parts.join("\n"));
-    typeBreakdown->setStyleSheet("font-size: 12px;");
+    typeBreakdown->setText(parts.isEmpty() ? "" : "Account types: " + parts.join("  |  "));
 
     // Show at most 15 recent transactions on the Dashboard:
     if(txns.size() > 15)
@@ -400,12 +414,17 @@ void AdminWindow::refreshAccounts()
         accountTable->setItem(row, 2, cell(phone));
         accountTable->setItem(row, 3, cell(QString::fromStdString(a.getAccountType())));
         accountTable->setItem(row, 4, cell(money(a.getBalancePaisa()), true));
+        long long debt = bank.activeLoanDebt(a.getAccountNumber());
+        auto* debtItem = cell(debt > 0 ? money(debt) : "-", true);
+        if(debt > 0)
+            debtItem->setForeground(QColor("#b45309"));
+        accountTable->setItem(row, 5, debtItem);
         auto* s = cell(st);
         // [STATUS COLORS] Green for Active, Orange for Pending, Red for Closed:
         s->setForeground(st == "Active" ? QColor("#15803d") : st == "Pending" ? QColor("#b45309") : QColor("#b91c1c"));
-        accountTable->setItem(row, 5, s);
+        accountTable->setItem(row, 6, s);
         QString login = bank.loginName(a.getAccountNumber());
-        accountTable->setItem(row, 6, cell(login.isEmpty() ? "-" : login));
+        accountTable->setItem(row, 7, cell(login.isEmpty() ? "-" : login));
         if(a.getAccountNumber() == keep)
             accountTable->selectRow(row);
     }
@@ -596,10 +615,18 @@ void AdminWindow::doDelete()
                                  .arg(number).arg(money(a->getBalancePaisa())));
         return;
     }
+    long long debt = bank.activeLoanDebt(number);
+    if(debt > 0)
+    {
+        QMessageBox::warning(this, "Cannot delete account",
+                             QString("Account %1 has an unpaid active loan of %2.\nThe loan must be repaid before deleting the account.")
+                                 .arg(number).arg(money(debt)));
+        return;
+    }
     bool ok = false;
     QString typed = QInputDialog::getText(
         this, "Delete account",
-        QString("This permanently deletes account <b>%1</b> (%2), its customer login and its deposit requests. "
+        QString("This permanently deletes account <b>%1</b> (%2), its customer login, deposit requests, and loan records. "
                 "This cannot be undone.<br><br>Type the account number to confirm:")
             .arg(number).arg(QString::fromStdString(a->getCustomerName())),
         QLineEdit::Normal, "", &ok).trimmed();
@@ -749,4 +776,109 @@ void AdminWindow::doReject()
         return;
     if(QMessageBox::question(this, "Reject deposit", "Reject this deposit request?") == QMessageBox::Yes)
         report(bank.rejectDeposit(id));
+}
+
+// ============================================================================
+// PAGE 4: LOANS (Filter + Approve/Reject loan buttons + loans table)
+// ============================================================================
+QWidget* AdminWindow::buildLoans()
+{
+    auto* page = new QWidget;
+    auto* v = new QVBoxLayout(page);
+    v->setContentsMargins(24, 20, 24, 20);
+
+    // [PAGE TITLE] Loans heading and subtitle:
+    makeTitle("Loans", "Review customer loan applications. Approving a loan credits the customer's account immediately.", v);
+
+    // [FILTER & ACTION BUTTONS] Status filter dropdown + "Approve loan" and "Reject loan" buttons:
+    loanFilter = new QComboBox;
+    loanFilter->addItems({"Pending", "Active", "Paid", "Rejected", "All"});
+    auto* row = new QHBoxLayout;
+    row->addWidget(new QLabel("Show:"));
+    row->addWidget(loanFilter);
+    row->addStretch();
+    approveLoanBtn = makeButton("Approve loan", true);      // Blue primary button
+    rejectLoanBtn = makeButton("Reject loan", false, true); // Red danger button
+    row->addWidget(approveLoanBtn);
+    row->addWidget(rejectLoanBtn);
+    v->addLayout(row);
+
+    // [LOANS TABLE] Change column headers here:
+    loanTable = makeTable({"Loan ID", "Requested", "Account", "Customer", "Purpose", "Amount", "Remaining Due", "Status", "Decided"});
+    v->addWidget(loanTable, 1);
+
+    connect(loanFilter, &QComboBox::currentIndexChanged, this, [this] { refreshLoans(); });
+    connect(loanTable, &QTableWidget::itemSelectionChanged, this, [this] {
+        bool pending = selectedLoan() > 0 && loanTable->item(loanTable->currentRow(), 7)->text() == "Pending";
+        approveLoanBtn->setEnabled(pending);
+        rejectLoanBtn->setEnabled(pending);
+    });
+    connect(approveLoanBtn, &QPushButton::clicked, this, [this] { doApproveLoan(); });
+    connect(rejectLoanBtn, &QPushButton::clicked, this, [this] { doRejectLoan(); });
+    approveLoanBtn->setEnabled(false);
+    rejectLoanBtn->setEnabled(false);
+    return page;
+}
+
+int AdminWindow::selectedLoan() const
+{
+    int row = loanTable->currentRow();
+    if(row < 0 || loanTable->selectedItems().isEmpty() || !loanTable->item(row, 0))
+        return -1;
+    return loanTable->item(row, 0)->text().toInt();
+}
+
+void AdminWindow::refreshLoans()
+{
+    const QString filter = loanFilter->currentText();
+    loanTable->setRowCount(0);
+    for(const LoanRequest& l : bank.loanRequests())
+    {
+        if(filter != "All" && l.status != filter)
+            continue;
+        const Account* a = bank.find(l.accountNumber);
+        int row = loanTable->rowCount();
+        loanTable->insertRow(row);
+        loanTable->setItem(row, 0, cell(QString::number(l.id)));
+        loanTable->setItem(row, 1, cell(l.requestedAt));
+        loanTable->setItem(row, 2, cell(QString::number(l.accountNumber)));
+        loanTable->setItem(row, 3, cell(a ? QString::fromStdString(a->getCustomerName()) : "-"));
+        loanTable->setItem(row, 4, cell(l.purpose));
+        loanTable->setItem(row, 5, cell(money(l.amountPaisa), true));
+        loanTable->setItem(row, 6, cell(money(l.remainingPaisa), true));
+        auto* st = cell(l.status);
+        st->setForeground((l.status == "Active" || l.status == "Paid") ? QColor("#15803d")
+                          : l.status == "Rejected" ? QColor("#b91c1c") : QColor("#b45309"));
+        loanTable->setItem(row, 7, st);
+        loanTable->setItem(row, 8, cell(l.decidedAt.isEmpty() ? "-" : l.decidedAt));
+    }
+    bool pending = selectedLoan() > 0 && loanTable->item(loanTable->currentRow(), 7)->text() == "Pending";
+    approveLoanBtn->setEnabled(pending);
+    rejectLoanBtn->setEnabled(pending);
+}
+
+void AdminWindow::doApproveLoan()
+{
+    int id = selectedLoan();
+    if(id < 0)
+        return;
+    for(const LoanRequest& l : bank.loanRequests())
+        if(l.id == id)
+        {
+            if(QMessageBox::question(this, "Approve loan",
+                                     QString("Approve <b>%1</b> loan of <b>%2</b> for account %3?")
+                                         .arg(l.purpose).arg(money(l.amountPaisa)).arg(l.accountNumber)) != QMessageBox::Yes)
+                return;
+            break;
+        }
+    report(bank.approveLoan(id));
+}
+
+void AdminWindow::doRejectLoan()
+{
+    int id = selectedLoan();
+    if(id < 0)
+        return;
+    if(QMessageBox::question(this, "Reject loan", "Reject this loan application?") == QMessageBox::Yes)
+        report(bank.rejectLoan(id));
 }

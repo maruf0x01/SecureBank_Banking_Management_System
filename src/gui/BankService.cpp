@@ -1,7 +1,7 @@
 // ============================================================================
 // FILE: BankService.cpp
 // PURPOSE: Implements all business rules, input validations, password hashing,
-//          deposit request workflow, and file persistence for the GUI.
+//          deposit request workflow, loan workflow, and file persistence.
 // ============================================================================
 #include "BankService.h"
 
@@ -22,12 +22,13 @@ BankService::BankService()
     reload();
 }
 
-// Reloads accounts, customer logins, and deposit requests from the data/ files.
+// Reloads accounts, customer logins, deposit requests, and loans from the data/ files.
 void BankService::reload()
 {
     accountList = FileManager::loadAccounts(accountsFile);
     loadCredentials();
     loadDeposits();
+    loadLoans();
 }
 
 const Account* BankService::find(int number) const
@@ -192,7 +193,7 @@ Result BankService::updateAccount(int number, const QString& name, const QString
     return {true, "Account updated."};
 }
 
-// Permanently deletes an account (requires 0 balance), its login, and its deposit requests.
+// Permanently deletes an account (requires 0 balance and 0 unpaid loan), its login, deposits, and loans.
 Result BankService::deleteAccount(int number)
 {
     auto it = std::find_if(accountList.begin(), accountList.end(),
@@ -203,10 +204,16 @@ Result BankService::deleteAccount(int number)
         return {false, "This account still has a balance of " +
                            QString::fromStdString(formatPaisa(it->getBalancePaisa())) +
                            ". Withdraw or transfer the money before deleting it."};
+    long long debt = activeLoanDebt(number);
+    if(debt > 0)
+        return {false, "This account has an unpaid active loan of " +
+                           QString::fromStdString(formatPaisa(debt)) +
+                           ". The loan must be repaid before deleting the account."};
 
     std::vector<Account> accountsBackup = accountList;
     std::vector<Credential> credBackup = credentials;
     std::vector<DepositRequest> depBackup = deposits;
+    std::vector<LoanRequest> loanBackup = loans;
 
     accountList.erase(it);
     credentials.erase(std::remove_if(credentials.begin(), credentials.end(),
@@ -215,15 +222,20 @@ Result BankService::deleteAccount(int number)
     deposits.erase(std::remove_if(deposits.begin(), deposits.end(),
                                   [&](const DepositRequest& d) { return d.accountNumber == number; }),
                    deposits.end());
+    loans.erase(std::remove_if(loans.begin(), loans.end(),
+                               [&](const LoanRequest& l) { return l.accountNumber == number; }),
+                loans.end());
 
-    if(!saveAccounts() || !saveCredentials() || !saveDeposits())
+    if(!saveAccounts() || !saveCredentials() || !saveDeposits() || !saveLoans())
     {
         accountList = accountsBackup;
         credentials = credBackup;
         deposits = depBackup;
+        loans = loanBackup;
         saveAccounts();
         saveCredentials();
         saveDeposits();
+        saveLoans();
         return {false, "Unable to delete the account (could not save data)."};
     }
     return {true, QString("Account %1 deleted.").arg(number)};
@@ -238,6 +250,9 @@ Result BankService::setActive(int number, bool active)
     std::string wanted = active ? "Active" : "Closed";
     if(a->getStatus() == wanted)
         return {false, active ? "Account is already active." : "Account is already closed."};
+    if(!active && activeLoanDebt(number) > 0)
+        return {false, "Cannot close this account while it has an unpaid loan of " +
+                           QString::fromStdString(formatPaisa(activeLoanDebt(number))) + "."};
     bool wasPending = a->getStatus() == "Pending";
     std::string old = a->getStatus();
     a->setStatus(wanted);
@@ -643,4 +658,222 @@ int BankService::pendingDepositCount() const
         if(d.status == "Pending")
             n++;
     return n;
+}
+
+// ---------- Loans (stored in data/loans.txt) ----------
+
+void BankService::loadLoans()
+{
+    loans.clear();
+    QFile file(loansFile);
+    if(!file.open(QIODevice::ReadOnly | QIODevice::Text))
+        return;
+    QTextStream in(&file);
+    while(!in.atEnd())
+    {
+        QStringList p = in.readLine().split('|');
+        if(p.size() != 8)
+            continue;
+        bool ok1, ok2, ok3, ok4;
+        LoanRequest l;
+        l.id = p[0].toInt(&ok1);
+        l.accountNumber = p[1].toInt(&ok2);
+        l.amountPaisa = p[2].toLongLong(&ok3);
+        l.remainingPaisa = p[3].toLongLong(&ok4);
+        l.purpose = p[4];
+        l.requestedAt = p[5];
+        l.status = p[6];
+        l.decidedAt = p[7];
+        if(ok1 && ok2 && ok3 && ok4 && l.id > 0 && l.amountPaisa > 0 && l.remainingPaisa >= 0 &&
+           (l.status == "Pending" || l.status == "Active" || l.status == "Rejected" || l.status == "Paid"))
+            loans.push_back(l);
+    }
+}
+
+bool BankService::saveLoans() const
+{
+    QSaveFile file(loansFile);
+    if(!file.open(QIODevice::WriteOnly | QIODevice::Text))
+        return false;
+    QTextStream out(&file);
+    for(const LoanRequest& l : loans)
+        out << l.id << '|' << l.accountNumber << '|' << l.amountPaisa << '|' << l.remainingPaisa << '|'
+            << l.purpose << '|' << l.requestedAt << '|' << l.status << '|' << l.decidedAt << '\n';
+    out.flush();
+    return file.commit();
+}
+
+LoanRequest* BankService::findLoan(int id)
+{
+    for(LoanRequest& l : loans)
+        if(l.id == id)
+            return &l;
+    return nullptr;
+}
+
+// Customer submits a new loan application (status starts as "Pending").
+Result BankService::requestLoan(int accountNumber, long long paisa, const QString& purpose)
+{
+    const Account* a = find(accountNumber);
+    if(!a)
+        return {false, "Account not found."};
+    if(a->getStatus() != "Active")
+        return {false, "Your account is not active."};
+    if(paisa <= 0 || paisa > MaxAmountPaisa)
+        return {false, "Invalid loan amount."};
+    QString cleanPurpose = purpose.trimmed();
+    if(cleanPurpose.isEmpty() || cleanPurpose.size() > 40 || cleanPurpose.contains('|'))
+        return {false, "Please select a valid loan purpose."};
+
+    int openCount = 0, nextId = 1;
+    for(const LoanRequest& l : loans)
+    {
+        nextId = std::max(nextId, l.id + 1);
+        if(l.accountNumber == accountNumber && (l.status == "Pending" || l.status == "Active"))
+            openCount++;
+    }
+    if(openCount >= 5)
+        return {false, "You already have 5 pending or active loans. Please repay existing loans first."};
+
+    loans.push_back({nextId, accountNumber, paisa, paisa, cleanPurpose, nowText(), "Pending", ""});
+    if(!saveLoans())
+    {
+        loans.pop_back();
+        return {false, "Unable to save the loan request."};
+    }
+    return {true, "Loan application submitted. It will be credited once an administrator approves it.", nextId};
+}
+
+// Admin approves a Pending loan: status becomes "Active" and the money is credited to the customer's balance.
+Result BankService::approveLoan(int loanId)
+{
+    LoanRequest* l = findLoan(loanId);
+    if(!l)
+        return {false, "Loan request not found."};
+    if(l->status != "Pending")
+        return {false, "This loan request has already been " + l->status.toLower() + "."};
+    Account* a = findMutable(l->accountNumber);
+    if(!a || a->getStatus() != "Active")
+        return {false, "The account is not active, so the loan cannot be approved."};
+
+    LoanRequest backup = *l;
+    l->status = "Active";
+    l->remainingPaisa = l->amountPaisa;
+    l->decidedAt = nowText();
+    if(!saveLoans())
+    {
+        *l = backup;
+        return {false, "Unable to save the loan status."};
+    }
+    if(!a->deposit(l->amountPaisa))
+    {
+        *l = backup;
+        saveLoans();
+        return {false, "Loan approval failed (balance overflow)."};
+    }
+    if(!saveFinancial({makeTransaction(l->accountNumber, "Loan Disbursed", l->amountPaisa)}))
+    {
+        a->withdraw(l->amountPaisa);
+        *l = backup;
+        saveLoans();
+        return {false, "Unable to save account data."};
+    }
+    return {true, QString("Loan of %1 approved and credited to account %2.")
+                      .arg(QString::fromStdString(formatPaisa(backup.amountPaisa))).arg(backup.accountNumber)};
+}
+
+// Admin rejects a Pending loan application.
+Result BankService::rejectLoan(int loanId)
+{
+    LoanRequest* l = findLoan(loanId);
+    if(!l)
+        return {false, "Loan request not found."};
+    if(l->status != "Pending")
+        return {false, "This loan request has already been " + l->status.toLower() + "."};
+    LoanRequest backup = *l;
+    l->status = "Rejected";
+    l->remainingPaisa = 0;
+    l->decidedAt = nowText();
+    if(!saveLoans())
+    {
+        *l = backup;
+        return {false, "Unable to save the loan status."};
+    }
+    return {true, "Loan request rejected."};
+}
+
+// Customer repays part or all of an Active loan from their account balance.
+Result BankService::repayLoan(int accountNumber, int loanId, long long paisa)
+{
+    if(paisa <= 0 || paisa > MaxAmountPaisa)
+        return {false, "Invalid repayment amount."};
+    Account* a = findMutable(accountNumber);
+    if(!a)
+        return {false, "Account not found."};
+    if(a->getStatus() != "Active")
+        return {false, "Your account is not active."};
+    LoanRequest* l = findLoan(loanId);
+    if(!l || l->accountNumber != accountNumber)
+        return {false, "Loan not found."};
+    if(l->status != "Active")
+        return {false, "Only active loans can be repaid."};
+    if(paisa > l->remainingPaisa)
+        return {false, "Repayment amount exceeds the remaining loan balance of " +
+                           QString::fromStdString(formatPaisa(l->remainingPaisa)) + "."};
+    if(paisa > a->getBalancePaisa())
+        return {false, "Insufficient account balance to make this repayment."};
+
+    LoanRequest loanBackup = *l;
+    if(!a->withdraw(paisa))
+        return {false, "Insufficient account balance."};
+
+    l->remainingPaisa -= paisa;
+    if(l->remainingPaisa == 0)
+        l->status = "Paid";
+
+    if(!saveLoans())
+    {
+        a->deposit(paisa);
+        *l = loanBackup;
+        return {false, "Unable to save loan repayment."};
+    }
+    if(!saveFinancial({makeTransaction(accountNumber, "Loan Repayment", paisa)}))
+    {
+        a->deposit(paisa);
+        *l = loanBackup;
+        saveLoans();
+        return {false, "Unable to save account transaction."};
+    }
+
+    if(l->remainingPaisa == 0)
+        return {true, "Loan fully repaid! Remaining loan balance is 0.00."};
+    return {true, "Loan repayment successful. Remaining loan due: " +
+                      QString::fromStdString(formatPaisa(l->remainingPaisa))};
+}
+
+std::vector<LoanRequest> BankService::loanRequests(int accountNumber) const
+{
+    std::vector<LoanRequest> out;
+    for(auto it = loans.rbegin(); it != loans.rend(); ++it)
+        if(accountNumber == 0 || it->accountNumber == accountNumber)
+            out.push_back(*it);
+    return out;
+}
+
+int BankService::pendingLoanCount() const
+{
+    int n = 0;
+    for(const LoanRequest& l : loans)
+        if(l.status == "Pending")
+            n++;
+    return n;
+}
+
+long long BankService::activeLoanDebt(int accountNumber) const
+{
+    long long total = 0;
+    for(const LoanRequest& l : loans)
+        if(l.status == "Active" && (accountNumber == 0 || l.accountNumber == accountNumber))
+            total += l.remainingPaisa;
+    return total;
 }

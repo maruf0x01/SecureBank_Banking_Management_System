@@ -1,8 +1,8 @@
 // ============================================================================
 // FILE: AdminWindow.h
 // PURPOSE: Header for the Administrator main window.
-//          Contains 4 pages switched via the left sidebar:
-//          0 = Dashboard, 1 = Accounts, 2 = Transactions, 3 = Deposit requests.
+//          Contains 5 pages switched via the left sidebar:
+//          0 = Dashboard, 1 = Accounts, 2 = Transactions, 3 = Deposit requests, 4 = Loans.
 // ============================================================================
 #pragma once
 
@@ -31,12 +31,12 @@ signals:
 private:
     BankService& bank;
 
-    QStackedWidget* pages; // Holds the 4 pages (Dashboard, Accounts, Transactions, Deposit requests)
+    QStackedWidget* pages; // Holds the 5 pages (Dashboard, Accounts, Transactions, Deposit requests, Loans)
     QListWidget* sidebar;  // Left navigation menu list
 
     // --- Page 0: Dashboard widgets ---
     QLabel *totalAccountsValue, *activeValue, *balanceValue, *loginsValue;
-    QLabel *depositsValue, *withdrawalsValue, *transfersValue;
+    QLabel *depositsValue, *withdrawalsValue, *transfersValue, *loansValue;
     QTableWidget* recentTable;
     QLabel* typeBreakdown;
 
@@ -56,6 +56,16 @@ private:
     int selectedRequest() const;
     void doApprove();
     void doReject();
+
+    // --- Page 4: Loans widgets & actions ---
+    QTableWidget* loanTable;
+    QComboBox* loanFilter;
+    QPushButton *approveLoanBtn, *rejectLoanBtn;
+    QWidget* buildLoans();
+    void refreshLoans();
+    int selectedLoan() const;
+    void doApproveLoan();
+    void doRejectLoan();
 
     // --- Page 2: Transactions widgets ---
     QLineEdit* historyAccount;

@@ -2,7 +2,8 @@
 // FILE: Dialogs.h
 // PURPOSE: Declarations for reusable UI helpers (buttons, tables, money format)
 //          and all pop-up form dialogs (New/Edit Account, Deposit/Withdraw
-//          amount, Transfer Money, Set Login, Change Password, Registration).
+//          amount, Transfer Money, Loan Application/Repayment, Set Login,
+//          Change Password, Registration).
 // ============================================================================
 #pragma once
 
@@ -40,6 +41,13 @@ bool askAmount(QWidget* parent, const QString& title, const QString& summary, lo
 // Pop-up dialog to transfer money. If fixedFrom > 0 (customer), sender is locked and receiver name is verified.
 bool askTransfer(QWidget* parent, const BankService& bank, int fixedFrom, int presetFrom,
                  int& from, int& to, long long& paisa, QString& receiverName);
+
+// Pop-up dialog for a customer to apply for a loan (Purpose dropdown + Amount)
+bool askLoanRequest(QWidget* parent, long long& paisa, QString& purpose);
+
+// Pop-up dialog for a customer to repay an active loan (partially or in full)
+bool askLoanRepayment(QWidget* parent, int loanId, long long remainingPaisa, long long balancePaisa,
+                      long long& paisa);
 
 // Pop-up dialog for admin to set or reset a customer's login username and password
 bool askCredentials(QWidget* parent, const QString& title, const QString& info, QString& username,
